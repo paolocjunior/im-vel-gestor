@@ -21,6 +21,8 @@ import ProviderFormPage from "./pages/ProviderFormPage";
 import ProviderDetailPage from "./pages/ProviderDetailPage";
 import SettingsPage from "./pages/SettingsPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
+import BillsPage from "./pages/BillsPage";
+import BillFormPage from "./pages/BillFormPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -49,6 +51,9 @@ const App = () => (
             <Route path="/studies/:id/steps/d" element={<P><StepDPage /></P>} />
             <Route path="/studies/:id/steps/e" element={<P><StepEPage /></P>} />
             <Route path="/studies/:id/vendors" element={<P><VendorsPage /></P>} />
+            <Route path="/studies/:id/bills" element={<P><BillsPage /></P>} />
+            <Route path="/studies/:id/bills/new" element={<P><BillFormPage /></P>} />
+            <Route path="/studies/:id/bills/:billId" element={<P><BillFormPage /></P>} />
             <Route path="/studies/:id/providers" element={<P><ProvidersPage /></P>} />
             <Route path="/studies/:id/providers/new" element={<P><ProviderFormPage /></P>} />
             <Route path="/studies/:id/providers/:providerId/edit" element={<P><ProviderFormPage /></P>} />
