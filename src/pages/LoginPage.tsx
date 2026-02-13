@@ -3,38 +3,64 @@ import { Building2, Eye, EyeOff, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useNavigate } from "react-router-dom";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useNavigate, Navigate, Link } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const { user, loading, signIn, signUp } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState("");
+
+  if (!loading && user) return <Navigate to="/hub" replace />;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
     setIsLoading(true);
-    // TODO: integrar com auth do backend
-    setTimeout(() => {
+
+    if (isSignUp) {
+      const { error } = await signUp(email, password, fullName);
       setIsLoading(false);
+      if (error) {
+        setError(error);
+        return;
+      }
+      toast.success("Conta criada! Verifique seu e-mail para confirmar.");
+      setIsSignUp(false);
+    } else {
+      const { error } = await signIn(email, password);
+      setIsLoading(false);
+      if (error) {
+        setError(error);
+        return;
+      }
       navigate("/hub");
-    }, 800);
+    }
   };
+
+  const isBlocked = error === "Muitas tentativas. Aguarde alguns minutos.";
 
   return (
     <div className="flex min-h-screen">
       {/* Painel esquerdo - branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-primary flex-col justify-between p-12">
+      <div className="hidden lg:flex lg:w-1/2 bg-sidebar flex-col justify-between p-12">
         <div className="flex items-center gap-3">
-          <Building2 className="h-8 w-8 text-accent" />
-          <span className="text-2xl font-bold text-primary-foreground">
-            Constru<span className="text-primary">Gestão</span>
+          <Building2 className="h-8 w-8 text-sidebar-primary" />
+          <span className="text-2xl font-bold text-sidebar-accent-foreground">
+            ConstruGestão
           </span>
         </div>
         <div className="space-y-4">
-          <h1 className="text-4xl font-bold text-primary-foreground leading-tight">
+          <h1 className="text-4xl font-bold text-sidebar-accent-foreground leading-tight">
             Gestão inteligente de<br />
             projetos imobiliários
           </h1>
@@ -48,18 +74,16 @@ const LoginPage = () => {
       </div>
 
       {/* Painel direito - formulário */}
-      <div className="flex w-full lg:w-1/2 items-center justify-center p-8">
-        <div className="w-full max-w-md space-y-8 animate-fade-in">
+      <div className="flex w-full lg:w-1/2 items-center justify-center p-8 bg-background">
+        <div className="w-full max-w-[460px] space-y-8 animate-fade-in">
           <div className="lg:hidden flex items-center gap-3 justify-center mb-8">
             <Building2 className="h-8 w-8 text-primary" />
-            <span className="text-2xl font-bold">
-              Constru<span className="text-primary">Gestão</span>
-            </span>
+            <span className="text-2xl font-bold">ConstruGestão</span>
           </div>
 
           <div className="space-y-2 text-center">
             <h2 className="text-2xl font-bold">
-              {isSignUp ? "Criar conta" : "Bem-vindo de volta"}
+              {isSignUp ? "Criar conta" : "Login"}
             </h2>
             <p className="text-muted-foreground">
               {isSignUp
@@ -68,7 +92,25 @@ const LoginPage = () => {
             </p>
           </div>
 
+          {error && (
+            <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg text-center">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
+            {isSignUp && (
+              <div className="space-y-2">
+                <Label htmlFor="fullName">Nome completo</Label>
+                <Input
+                  id="fullName"
+                  placeholder="Seu nome"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
               <Input
@@ -102,8 +144,28 @@ const LoginPage = () => {
               </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
+            {!isSignUp && (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="remember"
+                    checked={rememberMe}
+                    onCheckedChange={(v) => setRememberMe(v === true)}
+                  />
+                  <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">
+                    Manter sessão ativa
+                  </Label>
+                </div>
+                <Link to="/password-reset" className="text-sm text-primary hover:underline">
+                  Esqueci minha senha
+                </Link>
+              </div>
+            )}
+
+            <Button type="submit" className="w-full" disabled={isLoading || isBlocked}>
+              {isBlocked ? (
+                "Bloqueado temporariamente"
+              ) : isLoading ? (
                 "Carregando..."
               ) : (
                 <>
@@ -117,7 +179,7 @@ const LoginPage = () => {
           <p className="text-center text-sm text-muted-foreground">
             {isSignUp ? "Já tem uma conta?" : "Não tem uma conta?"}{" "}
             <button
-              onClick={() => setIsSignUp(!isSignUp)}
+              onClick={() => { setIsSignUp(!isSignUp); setError(""); }}
               className="text-primary font-medium hover:underline"
             >
               {isSignUp ? "Fazer login" : "Criar conta"}

@@ -1,20 +1,17 @@
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Building2,
   ShoppingCart,
   DollarSign,
   Users,
   FileText,
   Wallet,
   HardHat,
-  LogOut,
-  Settings,
   Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
 import StageEtapa from "@/components/dashboard/StageEtapa";
 import ResultCard from "@/components/dashboard/ResultCard";
+import GlobalTopbar from "@/components/GlobalTopbar";
 
 const modules = [
   { key: "novo", label: "Novo Projeto", icon: Plus },
@@ -32,28 +29,7 @@ const StudyDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header escuro */}
-      <header className="bg-sidebar text-sidebar-foreground">
-        <div className="max-w-[1440px] mx-auto flex items-center justify-between h-14 px-6">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-sidebar-primary" />
-            <span className="font-bold text-base text-sidebar-accent-foreground">
-              Gerenciamento de Projetos
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-sidebar-foreground hidden sm:block">supervisor@app.com.br</span>
-            <Button variant="outline" size="sm" className="border-sidebar-border text-sidebar-accent-foreground hover:bg-sidebar-accent text-xs">
-              <Settings className="h-3.5 w-3.5 mr-1.5" />
-              Configurações
-            </Button>
-            <Button variant="outline" size="sm" className="border-sidebar-border text-sidebar-accent-foreground hover:bg-sidebar-accent text-xs" onClick={() => navigate("/login")}>
-              <LogOut className="h-3.5 w-3.5 mr-1.5" />
-              Logout
-            </Button>
-          </div>
-        </div>
-      </header>
+      <GlobalTopbar />
 
       {/* Project info */}
       <div className="max-w-[1440px] mx-auto px-6 py-4 border-b bg-card">
@@ -97,10 +73,7 @@ const StudyDashboard = () => {
           <section className="md:col-span-6 order-2 space-y-4">
             <h2 className="font-bold text-base">Etapas</h2>
 
-            <StageEtapa
-              title="Dados do Imóvel/Terreno"
-              status="nao_iniciado"
-              colorClass="stage-green"
+            <StageEtapa title="Dados do Imóvel/Terreno" status="nao_iniciado" colorClass="stage-green"
               fields={[
                 { label: "Valor de compra", value: "—" },
                 { label: "Área útil (m²)", value: "—" },
@@ -108,13 +81,9 @@ const StudyDashboard = () => {
                 { label: "Área do terreno (m²)", value: "—" },
                 { label: "Valor do m²", value: "—" },
               ]}
-              onEdit={() => {}}
-            />
+              onEdit={() => {}} />
 
-            <StageEtapa
-              title="Financiamento"
-              status="dispensado"
-              colorClass="stage-purple"
+            <StageEtapa title="Financiamento" status="dispensado" colorClass="stage-purple"
               fields={[
                 { label: "Usar financiamento", value: "Não" },
                 { label: "Sistema", value: "—" },
@@ -123,13 +92,9 @@ const StudyDashboard = () => {
                 { label: "Juros mensal (%)", value: "—" },
                 { label: "Valor financiado", value: "R$ 0,00" },
               ]}
-              onEdit={() => {}}
-            />
+              onEdit={() => {}} />
 
-            <StageEtapa
-              title="Custos de Aquisição"
-              status="nao_iniciado"
-              colorClass="stage-yellow"
+            <StageEtapa title="Custos de Aquisição" status="nao_iniciado" colorClass="stage-yellow"
               fields={[
                 { label: "Entrada", value: "R$ 0,00" },
                 { label: "ITBI", value: "R$ 0,00" },
@@ -137,13 +102,9 @@ const StudyDashboard = () => {
                 { label: "Registro", value: "R$ 0,00" },
                 { label: "Escritura", value: "R$ 0,00" },
               ]}
-              onEdit={() => {}}
-            />
+              onEdit={() => {}} />
 
-            <StageEtapa
-              title="Custos até a Venda"
-              status="nao_iniciado"
-              colorClass="stage-pink"
+            <StageEtapa title="Custos até a Venda" status="nao_iniciado" colorClass="stage-pink"
               fields={[
                 { label: "Meses até a venda", value: "—" },
                 { label: "Parcela financiamento", value: "R$ 0,00" },
@@ -152,21 +113,16 @@ const StudyDashboard = () => {
                 { label: "Despesas mensais", value: "R$ 0,00" },
                 { label: "Prestador/Contratos", value: "R$ 5.500,00" },
               ]}
-              onEdit={() => {}}
-            />
+              onEdit={() => {}} />
 
-            <StageEtapa
-              title="Dados da Venda"
-              status="nao_iniciado"
-              colorClass="stage-blue"
+            <StageEtapa title="Dados da Venda" status="nao_iniciado" colorClass="stage-blue"
               fields={[
                 { label: "Valor de venda", value: "—" },
                 { label: "Quitação na venda", value: "R$ 0,00" },
                 { label: "Corretagem", value: "—" },
                 { label: "Imposto de renda", value: "R$ 0,00" },
               ]}
-              onEdit={() => {}}
-            />
+              onEdit={() => {}} />
           </section>
 
           {/* D3 - Resultados */}
@@ -179,7 +135,6 @@ const StudyDashboard = () => {
             <ResultCard label="Lucro" value="R$ 0,00" subtitle="Valor de venda" />
             <ResultCard label="ROI" value="0,00%" subtitle="Capital investido e valor de venda" />
 
-            {/* Indicador */}
             <div className="card-dashboard space-y-3">
               <p className="text-xs font-semibold">Indicador</p>
               <p className="kpi-value">Indefinido</p>
