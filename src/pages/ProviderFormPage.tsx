@@ -499,7 +499,7 @@ export default function ProviderFormPage() {
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       {banks.map(b => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}
-                      {banks.length === 0 && <SelectItem value="" disabled>Nenhuma instituição cadastrada</SelectItem>}
+                      {banks.length === 0 && <SelectItem value="__none" disabled>Nenhuma instituição cadastrada</SelectItem>}
                     </SelectContent>
                   </Select>
                 </div>
