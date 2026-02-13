@@ -242,6 +242,7 @@ export default function ProviderFormPage() {
     setDeleteContractId(null);
     toast.success("Contrato excluído.");
     loadContracts();
+    loadPayments();
   };
 
   // === Payments ===
