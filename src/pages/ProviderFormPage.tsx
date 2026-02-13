@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,11 +59,12 @@ const nextKey = () => `pk_${++_paymentKey}`;
 
 export default function ProviderFormPage() {
   const { id: studyId, providerId } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const isNew = !providerId || providerId === "new";
   const [savedProviderId, setSavedProviderId] = useState<string | null>(isNew ? null : providerId!);
-  const [tab, setTab] = useState("personal");
+  const [tab, setTab] = useState(searchParams.get("tab") || "personal");
   const [form, setForm] = useState({ ...emptyProvider });
   const [saving, setSaving] = useState(false);
   const [lookingUpCep, setLookingUpCep] = useState(false);

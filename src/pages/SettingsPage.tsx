@@ -104,7 +104,7 @@ export default function SettingsPage() {
 
       <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-6">
         <div className="flex flex-wrap gap-3">
-          <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
+          <Button variant="outline" size="sm" onClick={() => { window.history.length > 1 ? navigate(-1) : navigate("/hub"); }}>
             <ArrowLeft className="h-4 w-4 mr-1.5" />
             Voltar
           </Button>
