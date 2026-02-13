@@ -1043,6 +1043,7 @@ export type Database = {
     Functions: {
       owns_order: { Args: { p_order_id: string }; Returns: boolean }
       owns_study: { Args: { p_study_id: string }; Returns: boolean }
+      soft_delete_study: { Args: { p_study_id: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
