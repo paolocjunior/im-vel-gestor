@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { Paperclip, Upload, X, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,6 +77,15 @@ export default function BillFormPage() {
   // Clone change detection
   const [originalSnapshot, setOriginalSnapshot] = useState("");
 
+  // Anexos
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [attachments, setAttachments] = useState<{ id: string; file_name: string; file_path: string; file_size: number | null; }[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]); // files queued before bill is saved
+  const [uploading, setUploading] = useState(false);
+
+  // Determine effective bill id for attachments (null for new/clone)
+  const effectiveBillId = (isNew || isClone) ? null : billId;
+
   const categoryOptions = costCenter && COST_CENTERS[costCenter] ? COST_CENTERS[costCenter] : [];
 
   useEffect(() => {
@@ -85,6 +95,72 @@ export default function BillFormPage() {
   useEffect(() => {
     if (user && !isNew) loadBill();
   }, [user, billId]);
+
+  // Load attachments when we have a bill id
+  useEffect(() => {
+    if (effectiveBillId && studyId) loadAttachments();
+  }, [effectiveBillId, studyId]);
+
+  const loadAttachments = async () => {
+    if (!effectiveBillId) return;
+    const { data } = await supabase.from("documents")
+      .select("id, file_name, file_path, file_size")
+      .eq("study_id", studyId!)
+      .eq("entity", "bill")
+      .eq("entity_id", effectiveBillId)
+      .eq("is_deleted", false)
+      .order("created_at");
+    setAttachments(data || []);
+  };
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const targetBillId = effectiveBillId;
+    if (!targetBillId) {
+      // Queue files for upload after save
+      setPendingFiles(prev => [...prev, ...Array.from(files)]);
+      toast.success("Arquivo(s) adicionado(s). Serão enviados ao salvar.");
+      return;
+    }
+    setUploading(true);
+    await uploadFilesToBill(targetBillId, Array.from(files));
+    setUploading(false);
+    loadAttachments();
+    toast.success("Arquivo(s) anexado(s)!");
+  };
+
+  const uploadFilesToBill = async (targetBillId: string, files: File[]) => {
+    for (const file of files) {
+      const path = `${studyId}/${targetBillId}/${Date.now()}_${file.name}`;
+      const { error: uploadErr } = await supabase.storage.from("documents").upload(path, file);
+      if (uploadErr) { toast.error(`Erro ao enviar ${file.name}`); continue; }
+      await supabase.from("documents").insert({
+        study_id: studyId!,
+        entity: "bill",
+        entity_id: targetBillId,
+        file_name: file.name,
+        file_path: path,
+        file_size: file.size,
+        mime_type: file.type || null,
+      });
+    }
+  };
+
+  const handleDeleteAttachment = async (doc: typeof attachments[0]) => {
+    await supabase.storage.from("documents").remove([doc.file_path]);
+    await supabase.from("documents").update({ is_deleted: true }).eq("id", doc.id);
+    setAttachments(prev => prev.filter(a => a.id !== doc.id));
+    toast.success("Anexo removido.");
+  };
+
+  const handleDownloadAttachment = async (doc: typeof attachments[0]) => {
+    const { data } = await supabase.storage.from("documents").download(doc.file_path);
+    if (!data) { toast.error("Erro ao baixar arquivo."); return; }
+    const url = URL.createObjectURL(data);
+    const a = document.createElement("a");
+    a.href = url; a.download = doc.file_name; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const loadVendors = async () => {
     const { data } = await supabase.from("study_vendors")
@@ -317,6 +393,12 @@ export default function BillFormPage() {
     const { data: newBill, error: billErr } = await supabase.from("bills").insert(billPayload).select("id").single();
     if (billErr || !newBill) { setSaving(false); toast.error("Erro ao salvar despesa."); return; }
 
+    // Upload pending attachments
+    if (pendingFiles.length > 0) {
+      await uploadFilesToBill(newBill.id, pendingFiles);
+      setPendingFiles([]);
+    }
+
     if (installmentPlan === "AVISTA") {
       // Single installment
       await supabase.from("bill_installments").insert({
@@ -331,9 +413,7 @@ export default function BillFormPage() {
         status: "PENDING",
       });
       setSaving(false);
-      // Ask if already paid
       setAvistaConfirmOpen(true);
-      // Store the bill id for the confirm handler
       (window as any).__lastBillId = newBill.id;
     } else {
       // Multiple installments
@@ -532,11 +612,62 @@ export default function BillFormPage() {
         </fieldset>
 
         {/* Block 5: Anexos */}
-        <fieldset className="border rounded-lg p-4 space-y-2">
+        <fieldset className="border rounded-lg p-4 space-y-3">
           <legend className="font-bold text-sm px-2">Anexos:</legend>
-          <p className="text-sm text-muted-foreground">
-            Funcionalidade de anexos em breve.
-          </p>
+          {!isView && (
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={e => { handleFileUpload(e.target.files); e.target.value = ""; }}
+              />
+              <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                <Upload className="w-4 h-4 mr-1" /> {uploading ? "Enviando..." : "Adicionar Arquivo"}
+              </Button>
+            </div>
+          )}
+          {/* Pending files (not yet uploaded) */}
+          {pendingFiles.length > 0 && (
+            <div className="space-y-1">
+              {pendingFiles.map((f, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm bg-muted rounded px-2 py-1">
+                  <Paperclip className="w-3 h-3" />
+                  <span className="flex-1 truncate">{f.name}</span>
+                  <span className="text-muted-foreground text-xs">(pendente)</span>
+                  {!isView && (
+                    <button onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))} className="text-destructive hover:text-destructive/80">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Uploaded attachments */}
+          {attachments.length > 0 && (
+            <div className="space-y-1">
+              {attachments.map(doc => (
+                <div key={doc.id} className="flex items-center gap-2 text-sm bg-muted rounded px-2 py-1">
+                  <Paperclip className="w-3 h-3" />
+                  <span className="flex-1 truncate">{doc.file_name}</span>
+                  {doc.file_size && <span className="text-muted-foreground text-xs">{(doc.file_size / 1024).toFixed(0)} KB</span>}
+                  <button onClick={() => handleDownloadAttachment(doc)} className="text-primary hover:text-primary/80">
+                    <Download className="w-3 h-3" />
+                  </button>
+                  {!isView && (
+                    <button onClick={() => handleDeleteAttachment(doc)} className="text-destructive hover:text-destructive/80">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {attachments.length === 0 && pendingFiles.length === 0 && (
+            <p className="text-sm text-muted-foreground">Nenhum anexo adicionado.</p>
+          )}
         </fieldset>
 
         {/* Buttons */}
