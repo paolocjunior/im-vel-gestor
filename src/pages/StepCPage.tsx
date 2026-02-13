@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import GlobalTopbar from "@/components/GlobalTopbar";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +17,9 @@ export default function StepCPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showMismatchDialog, setShowMismatchDialog] = useState(false);
+  const [financingDownPayment, setFinancingDownPayment] = useState(0);
+  const [financingEnabled, setFinancingEnabled] = useState(false);
   const [form, setForm] = useState({
     down_payment_acquisition: 0,
     itbi_mode: "PERCENT",
@@ -31,12 +35,16 @@ export default function StepCPage() {
 
   const loadData = async () => {
     const { data } = await supabase.from("study_inputs")
-      .select("down_payment_acquisition, itbi_mode, itbi_percent, itbi_value, bank_appraisal, registration_fee, deed_fee, purchase_value")
+      .select("down_payment_acquisition, itbi_mode, itbi_percent, itbi_value, bank_appraisal, registration_fee, deed_fee, purchase_value, financing_enabled, down_payment_value")
       .eq("study_id", id).single();
     if (data) {
+      const finEnabled = data.financing_enabled;
+      const finDown = Number(data.down_payment_value);
+      setFinancingEnabled(finEnabled);
+      setFinancingDownPayment(finDown);
       setPurchaseValue(Number(data.purchase_value));
       setForm({
-        down_payment_acquisition: Number(data.down_payment_acquisition),
+        down_payment_acquisition: finEnabled && finDown > 0 ? finDown : Number(data.down_payment_acquisition),
         itbi_mode: data.itbi_mode,
         itbi_percent: Number(data.itbi_percent),
         itbi_value: Number(data.itbi_value),
@@ -55,6 +63,15 @@ export default function StepCPage() {
     : form.itbi_value;
 
   const save = async (goBack: boolean) => {
+    // Validate mismatch if financing is enabled
+    if (financingEnabled && financingDownPayment > 0 && form.down_payment_acquisition !== financingDownPayment) {
+      setShowMismatchDialog(true);
+      return;
+    }
+    await doSave(goBack);
+  };
+
+  const doSave = async (goBack: boolean) => {
     setSaving(true);
     const { error } = await supabase.from("study_inputs").update({
       down_payment_acquisition: form.down_payment_acquisition,
@@ -69,7 +86,7 @@ export default function StepCPage() {
     if (error) { toast.error("Erro ao salvar."); setSaving(false); return; }
     await recomputeAndSave(id!, user!.id);
     setSaving(false);
-    toast.success("Etapa C salva!");
+    toast.success("Custos de aquisição salvos!");
     if (goBack) navigate(`/studies/${id}/dashboard`);
   };
 
@@ -80,11 +97,14 @@ export default function StepCPage() {
       <GlobalTopbar />
       <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
         <div className="card-dashboard space-y-5">
-          <h2 className="font-bold text-lg">Etapa C — Custos de Aquisição</h2>
+          <h2 className="font-bold text-lg">Custos de Aquisição</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Entrada na aquisição (R$)</Label>
               <MaskedNumberInput value={form.down_payment_acquisition} onValueChange={v => setNum("down_payment_acquisition", v)} />
+              {financingEnabled && financingDownPayment > 0 && (
+                <p className="text-xs text-muted-foreground">Preenchido automaticamente pela entrada do financiamento</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Modo ITBI</Label>
@@ -128,6 +148,26 @@ export default function StepCPage() {
           </div>
         </div>
       </div>
+
+      <Dialog open={showMismatchDialog} onOpenChange={setShowMismatchDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Valores incompatíveis</DialogTitle>
+            <DialogDescription>
+              O valor de entrada na aquisição ({form.down_payment_acquisition.toLocaleString("pt-BR", { minimumFractionDigits: 2, style: "currency", currency: "BRL" })}) está diferente do valor de entrada configurado no financiamento ({financingDownPayment.toLocaleString("pt-BR", { minimumFractionDigits: 2, style: "currency", currency: "BRL" })}).
+              <br /><br />
+              Quando o financiamento está ativo, a entrada na aquisição deve ser igual à entrada do financiamento, pois representam o mesmo desembolso. Corrija o valor ou atualize o financiamento para manter a consistência.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => {
+              setForm(f => ({ ...f, down_payment_acquisition: financingDownPayment }));
+              setShowMismatchDialog(false);
+            }}>Usar valor do financiamento</Button>
+            <Button variant="ghost" onClick={() => setShowMismatchDialog(false)}>Cancelar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

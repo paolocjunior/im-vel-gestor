@@ -87,7 +87,7 @@ export default function StepBPage() {
     const { data: newComputed } = await supabase.from("study_computed").select("financed_amount, first_installment, last_installment, total_paid_financing, total_interest").eq("study_id", id).single();
     if (newComputed) setComputed(newComputed);
     setSaving(false);
-    toast.success("Etapa B salva!");
+    toast.success("Financiamento salvo!");
     if (goBack) navigate(`/studies/${id}/dashboard`);
   };
 
@@ -98,7 +98,7 @@ export default function StepBPage() {
       <GlobalTopbar />
       <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
         <div className="card-dashboard space-y-5">
-          <h2 className="font-bold text-lg">Etapa B — Financiamento</h2>
+          <h2 className="font-bold text-lg">Financiamento</h2>
 
           <div className="flex items-center gap-3">
             <Label className="text-sm">Usar financiamento?</Label>
@@ -128,7 +128,7 @@ export default function StepBPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Juros mensal (%)</Label>
-                <MaskedNumberInput value={form.monthly_interest_rate} onValueChange={v => setNum("monthly_interest_rate", v)} decimals={4} />
+                <MaskedNumberInput value={form.monthly_interest_rate} onValueChange={v => setNum("monthly_interest_rate", v)} decimals={2} />
               </div>
             </div>
           ) : (

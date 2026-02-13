@@ -70,7 +70,7 @@ export default function StepDPage() {
     if (error) { toast.error("Erro ao salvar."); setSaving(false); return; }
     await recomputeAndSave(id!, user!.id);
     setSaving(false);
-    toast.success("Etapa D salva!");
+    toast.success("Custos até a venda salvos!");
     if (goBack) navigate(`/studies/${id}/dashboard`);
   };
 
@@ -81,7 +81,7 @@ export default function StepDPage() {
       <GlobalTopbar />
       <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
         <div className="card-dashboard space-y-5">
-          <h2 className="font-bold text-lg">Etapa D — Custos até a Venda</h2>
+          <h2 className="font-bold text-lg">Custos até a Venda</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Meses até a venda</Label>
@@ -90,7 +90,7 @@ export default function StepDPage() {
             <div className="space-y-1.5">
               <Label>Parcela financiamento (R$)</Label>
               <Input type="text" value={form.monthly_financing_payment.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} disabled className="bg-muted/30" />
-              <p className="text-xs text-muted-foreground">Calculado na Etapa B</p>
+              <p className="text-xs text-muted-foreground">Calculado no Financiamento</p>
             </div>
             <div className="flex items-center gap-2 pt-4">
               <Switch checked={form.has_condo_fee} onCheckedChange={v => setForm(f => ({ ...f, has_condo_fee: v }))} />

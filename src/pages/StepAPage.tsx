@@ -40,7 +40,15 @@ export default function StepAPage() {
     setLoading(false);
   };
 
-  const setNum = (k: string, v: number) => setForm(f => ({ ...f, [k]: v }));
+  const setNum = (k: string, v: number) => setForm(f => {
+    const next = { ...f, [k]: v };
+    // Auto-calculate price per m² when not manual
+    if (!next.price_per_m2_manual && (k === "purchase_value" || k === "usable_area_m2" || k === "total_area_m2" || k === "land_area_m2")) {
+      const area = next.usable_area_m2 || next.total_area_m2 || next.land_area_m2;
+      next.purchase_price_per_m2 = area > 0 && next.purchase_value > 0 ? Number((next.purchase_value / area).toFixed(2)) : 0;
+    }
+    return next;
+  });
 
   const validate = (): string[] => {
     const errors: string[] = [];
@@ -69,7 +77,7 @@ export default function StepAPage() {
     if (error) { toast.error("Erro ao salvar."); setSaving(false); return; }
     await recomputeAndSave(id!, user!.id);
     setSaving(false);
-    toast.success("Etapa A salva!");
+    toast.success("Dados do imóvel salvos!");
     if (goBack) navigate(`/studies/${id}/dashboard`);
   };
 
@@ -80,7 +88,7 @@ export default function StepAPage() {
       <GlobalTopbar />
       <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
         <div className="card-dashboard space-y-5">
-          <h2 className="font-bold text-lg">Etapa A — Dados do Imóvel/Terreno</h2>
+          <h2 className="font-bold text-lg">Dados do Imóvel/Terreno</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Valor de compra (R$)</Label>
