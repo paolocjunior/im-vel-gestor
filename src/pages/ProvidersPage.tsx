@@ -57,7 +57,7 @@ export default function ProvidersPage() {
       supabase.from("study_provider_contracts")
         .select("id, provider_id, service, status, start_date")
         .eq("study_id", studyId).eq("is_deleted", false)
-        .order("start_date", { ascending: false }),
+        .order("start_date", { ascending: true }),
     ]);
     setProviders(pRes.data || []);
     setContracts(cRes.data || []);

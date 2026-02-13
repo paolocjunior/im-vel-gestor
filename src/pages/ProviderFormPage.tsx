@@ -118,7 +118,7 @@ export default function ProviderFormPage() {
     const { data } = await supabase.from("study_provider_contracts")
       .select("id, service, amount, billing_model, start_date, end_date, status, details")
       .eq("provider_id", providerId).eq("study_id", studyId).eq("is_deleted", false)
-      .order("start_date", { ascending: false });
+      .order("start_date", { ascending: true });
     setContracts((data || []).map(c => ({ ...c, amount: Number(c.amount), end_date: c.end_date || null, details: c.details || null })));
   };
 
