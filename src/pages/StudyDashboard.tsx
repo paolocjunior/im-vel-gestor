@@ -19,8 +19,8 @@ const modules = [
   { key: "novo", label: "Novo Projeto", icon: Plus, path: "/hub" },
   { key: "pedidos", label: "Pedido de compra", icon: ShoppingCart },
   { key: "financeiro", label: "Financeiro", icon: DollarSign },
-  { key: "fornecedores", label: "Fornecedores", icon: Users },
-  { key: "contratos", label: "Prestador/Contratos", icon: FileText },
+  { key: "fornecedores", label: "Fornecedores", icon: Users, pathSuffix: "/vendors" },
+  { key: "contratos", label: "Prestador/Contratos", icon: FileText, pathSuffix: "/providers" },
   { key: "folha", label: "Folha", icon: Wallet },
   { key: "obras", label: "Obras/Construção", icon: HardHat },
 ];
@@ -118,9 +118,10 @@ const StudyDashboard = () => {
               <div className="space-y-2">
                 {modules.map((mod) => {
                   const Icon = mod.icon;
+                  const path = mod.path || ((mod as any).pathSuffix ? `/studies/${id}${(mod as any).pathSuffix}` : undefined);
                   return (
                     <Button key={mod.key} variant="default" size="sm" className="w-full justify-start text-sm"
-                      onClick={() => mod.path ? navigate(mod.path) : null}>
+                      onClick={() => path ? navigate(path) : null} disabled={!path}>
                       <Icon className="h-4 w-4 mr-2 shrink-0" />
                       {mod.label}
                     </Button>
@@ -166,6 +167,26 @@ const StudyDashboard = () => {
                     { label: "Escritura", value: fmtMoney(inputs.deed_fee) },
                   ]}
                   onEdit={() => navigate(`/studies/${id}/steps/c`)} />
+
+                <StageEtapa title="Custos até a Venda" status={getStepStatus(inputs, "d")} colorClass="stage-pink"
+                  fields={[
+                    { label: "Meses até a venda", value: dash(inputs.months_to_sale) },
+                    { label: "Parcela financiamento", value: fmtMoney(inputs.monthly_financing_payment) },
+                    { label: "Condomínio", value: fmtMoney(inputs.condo_fee) },
+                    { label: "IPTU", value: fmtMoney(inputs.iptu_value) },
+                    { label: "Despesas mensais", value: fmtMoney(inputs.monthly_expenses) },
+                    { label: "Prestador/Contratos", value: fmtMoney(computed?.provider_contracts_total) },
+                  ]}
+                  onEdit={() => navigate(`/studies/${id}/steps/d`)} />
+
+                <StageEtapa title="Dados da Venda" status={getStepStatus(inputs, "e")} colorClass="stage-blue"
+                  fields={[
+                    { label: "Valor de venda", value: fmtMoney(inputs.sale_value) },
+                    { label: "Quitação na venda", value: fmtMoney(inputs.payoff_at_sale) },
+                    { label: "Corretagem", value: inputs.brokerage_mode === "PERCENT" ? `${inputs.brokerage_percent}%` : fmtMoney(inputs.brokerage_value) },
+                    { label: "Imposto de renda", value: fmtMoney(inputs.income_tax) },
+                  ]}
+                  onEdit={() => navigate(`/studies/${id}/steps/e`)} />
 
                 <StageEtapa title="Custos até a Venda" status={getStepStatus(inputs, "d")} colorClass="stage-pink"
                   fields={[
