@@ -18,7 +18,7 @@ type StageStatus = "nao_iniciado" | "incompleto" | "completo" | "dispensado";
 const modules = [
   { key: "novo", label: "Novo Projeto", icon: Plus, path: "/hub" },
   { key: "pedidos", label: "Pedido de compra", icon: ShoppingCart },
-  { key: "financeiro", label: "Financeiro", icon: DollarSign },
+  { key: "financeiro", label: "Financeiro", icon: DollarSign, pathSuffix: "/bills" },
   { key: "fornecedores", label: "Fornecedores", icon: Users, pathSuffix: "/vendors" },
   { key: "contratos", label: "Prestador/Contratos", icon: FileText, pathSuffix: "/providers" },
   { key: "folha", label: "Folha", icon: Wallet },
