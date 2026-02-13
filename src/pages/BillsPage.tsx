@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowLeft, ArrowUp, ArrowDown, Paperclip } from "lucide-react";
 import {
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
 } from "@/components/ui/table";
@@ -78,6 +78,7 @@ export default function BillsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [installments, setInstallments] = useState<Installment[]>([]);
+  const [billsWithAttachments, setBillsWithAttachments] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -116,6 +117,13 @@ export default function BillsPage() {
     const { data: insts } = await supabase.from("bill_installments")
       .select("*").eq("study_id", studyId).eq("is_deleted", false)
       .order("due_date", { ascending: true });
+
+    // Load documents to detect which bills have attachments
+    const { data: docs } = await supabase.from("documents")
+      .select("entity_id").eq("study_id", studyId!).eq("entity", "bill").eq("is_deleted", false);
+    const attachSet = new Set<string>();
+    (docs || []).forEach(d => { if (d.entity_id) attachSet.add(d.entity_id); });
+    setBillsWithAttachments(attachSet);
     
     const billMap: Record<string, any> = {};
     (bills || []).forEach(b => { billMap[b.id] = b; });
@@ -367,6 +375,7 @@ export default function BillsPage() {
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort("category")}>Categoria <SortIcon col="category" /></TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort("paid_at")}>Data Pagamento <SortIcon col="paid_at" /></TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort("status")}>Status <SortIcon col="status" /></TableHead>
+                  <TableHead className="w-8"></TableHead>
                   <TableHead>Opções</TableHead>
                 </TableRow>
               </TableHeader>
@@ -383,6 +392,11 @@ export default function BillsPage() {
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${inst.status === "PAID" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}>
                         {inst.status === "PAID" ? "Pago" : "Pendente"}
                       </span>
+                    </TableCell>
+                    <TableCell className="w-8 text-center">
+                      {billsWithAttachments.has(inst.bill_id) && (
+                        <Paperclip className="w-4 h-4 text-muted-foreground inline-block" />
+                      )}
                     </TableCell>
                     <TableCell>
                       <Select onValueChange={v => handleAction(v, inst)} value="">
