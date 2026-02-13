@@ -52,7 +52,7 @@ export default function ProviderDetailPage() {
       supabase.from("study_provider_contracts")
         .select("id, service, amount, billing_model, start_date, end_date, status, details")
         .eq("provider_id", providerId).eq("study_id", studyId).eq("is_deleted", false)
-        .order("start_date", { ascending: false }),
+        .order("start_date", { ascending: true }),
       supabase.from("study_provider_payments")
         .select("contract_id, amount, status")
         .eq("provider_id", providerId).eq("study_id", studyId).eq("is_deleted", false),
