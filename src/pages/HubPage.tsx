@@ -138,8 +138,12 @@ const HubPage = () => {
 
   const deleteStudy = async () => {
     if (!deleteId) return;
-    await supabase.from("studies").update({ is_deleted: true }).eq("id", deleteId);
+    const { error } = await supabase.from("studies").update({ is_deleted: true }).eq("id", deleteId);
     setDeleteId(null);
+    if (error) {
+      toast.error("Erro ao excluir projeto.");
+      return;
+    }
     toast.success("Projeto excluído.");
     loadStudies();
   };
