@@ -198,7 +198,6 @@ export default function BillFormPage() {
 
     if (bill.installment_plan !== "AVISTA") {
       const rows: InstallmentRow[] = (insts || [])
-        .filter(i => isEdit ? i.status !== "PAID" : true) // edit: only pending
         .map(i => ({
           _key: nk(),
           due_date: i.due_date,
@@ -206,7 +205,7 @@ export default function BillFormPage() {
           payment_method: i.payment_method || "",
           account_id: i.account_id || "",
           description: i.description || "",
-          _frozen: false,
+          _frozen: i.status === "PAID", // paid installments are frozen
           _dbId: i.id,
           _status: i.status,
           _paid_at: i.paid_at,
@@ -360,6 +359,8 @@ export default function BillFormPage() {
       // Update pending installments
       if (showInstallments) {
         for (const row of installments) {
+          // Only update pending installments
+          if (row._status === "PAID") continue;
           const instPayload = {
             due_date: row.due_date,
             amount: row.amount,
@@ -563,21 +564,24 @@ export default function BillFormPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {installments.map((row, i) => (
+                  {installments.map((row, i) => {
+                    const isPaid = row._status === "PAID";
+                    const isRowDisabled = isView || isPaid;
+                    return (
                     <tr key={row._key} className="border-b">
                       <td className="py-2 px-1 text-muted-foreground">{i + 1}</td>
                       <td className="py-2 px-1">
                         <Input type="date" className="w-36" value={row.due_date}
                           onChange={e => handleInstallmentFieldChange(row._key, "due_date", e.target.value)}
-                          disabled={isView} />
+                          disabled={isRowDisabled} />
                       </td>
                       <td className="py-2 px-1">
                         <MaskedNumberInput className="w-28" value={row.amount}
                           onValueChange={v => handleInstallmentAmountChange(row._key, v)}
-                          disabled={isView} />
+                          disabled={isRowDisabled} />
                       </td>
                       <td className="py-2 px-1">
-                        <Select value={row.payment_method} onValueChange={v => handleInstallmentFieldChange(row._key, "payment_method", v)} disabled={isView}>
+                        <Select value={row.payment_method} onValueChange={v => handleInstallmentFieldChange(row._key, "payment_method", v)} disabled={isRowDisabled}>
                           <SelectTrigger className="w-32"><SelectValue placeholder="—" /></SelectTrigger>
                           <SelectContent>
                             {PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
@@ -585,7 +589,7 @@ export default function BillFormPage() {
                         </Select>
                       </td>
                       <td className="py-2 px-1">
-                        <Select value={row.account_id} onValueChange={v => handleInstallmentFieldChange(row._key, "account_id", v)} disabled={isView}>
+                        <Select value={row.account_id} onValueChange={v => handleInstallmentFieldChange(row._key, "account_id", v)} disabled={isRowDisabled}>
                           <SelectTrigger className="w-32"><SelectValue placeholder="—" /></SelectTrigger>
                           <SelectContent>
                             {banks.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
@@ -593,12 +597,20 @@ export default function BillFormPage() {
                         </Select>
                       </td>
                       <td className="py-2 px-1">
-                        <Input className="w-40" value={row.description}
-                          onChange={e => handleInstallmentFieldChange(row._key, "description", e.target.value)}
-                          disabled={isView} />
+                        <div className="flex items-center gap-2">
+                          <Input className="w-40" value={row.description}
+                            onChange={e => handleInstallmentFieldChange(row._key, "description", e.target.value)}
+                            disabled={isRowDisabled} />
+                          {row._status && (
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${isPaid ? "bg-[#dcfce7] text-[#166534]" : "bg-[#fef3c7] text-[#b45309]"}`}>
+                              {isPaid ? "Pago" : "Pendente"}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
