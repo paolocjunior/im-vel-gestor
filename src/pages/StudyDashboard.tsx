@@ -38,6 +38,10 @@ function getStepStatus(inputs: any, step: "a" | "b" | "c" | "d" | "e"): StageSta
     if (inputs.financing_enabled && inputs.financing_system && inputs.financing_term_months && Number(inputs.monthly_interest_rate) > 0) return "completo";
     return inputs.financing_enabled ? "incompleto" : "dispensado";
   }
+  if (step === "c") {
+    // StepC is complete once saved (all fields have valid defaults)
+    return "completo";
+  }
   if (step === "d") {
     if (inputs.months_to_sale && inputs.months_to_sale >= 1) return "completo";
     return "incompleto";

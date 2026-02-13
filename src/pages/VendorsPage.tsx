@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Pencil, Trash2, ArrowLeft, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, ArrowLeft, Eye, Loader2, X } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -12,11 +12,18 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
+} from "@/components/ui/table";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import GlobalTopbar from "@/components/GlobalTopbar";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { lookupCEP } from "@/lib/cepLookup";
+import { lookupCNPJ, formatCNPJ, formatPhone } from "@/lib/cnpjLookup";
 
 interface Vendor {
   id: string;
@@ -36,6 +43,8 @@ const emptyForm = {
   neighborhood: "", city: "", state: "", notes: "",
 };
 
+type FilterKey = "name" | "cnpj" | "category" | "state";
+
 export default function VendorsPage() {
   const { id: studyId } = useParams();
   const navigate = useNavigate();
@@ -43,10 +52,15 @@ export default function VendorsPage() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [viewMode, setViewMode] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
+  const [lookingUp, setLookingUp] = useState(false);
+  const [filters, setFilters] = useState<Record<FilterKey, string[]>>({
+    name: [], cnpj: [], category: [], state: [],
+  });
 
   useEffect(() => { if (user && studyId) loadVendors(); }, [user, studyId]);
 
@@ -54,29 +68,124 @@ export default function VendorsPage() {
     const { data } = await supabase.from("study_vendors")
       .select("id, cnpj, razao_social, nome_fantasia, category, email, phone, city, state")
       .eq("study_id", studyId).eq("is_deleted", false)
-      .order("created_at", { ascending: false });
+      .order("razao_social", { ascending: true });
     setVendors(data || []);
     setLoading(false);
   };
 
-  const openNew = () => { setEditId(null); setForm({ ...emptyForm }); setDialogOpen(true); };
+  // Filter options derived from data
+  const filterOptions = useMemo(() => {
+    const names = new Set<string>();
+    const cnpjs = new Set<string>();
+    const categories = new Set<string>();
+    const states = new Set<string>();
+    vendors.forEach(v => {
+      const name = (v.nome_fantasia || v.razao_social || "").trim();
+      if (name) names.add(name);
+      if (v.cnpj?.trim()) cnpjs.add(v.cnpj.trim());
+      if (v.category?.trim()) categories.add(v.category.trim());
+      if (v.state?.trim()) states.add(v.state.trim());
+    });
+    return {
+      name: [...names].sort(),
+      cnpj: [...cnpjs].sort(),
+      category: [...categories].sort(),
+      state: [...states].sort(),
+    };
+  }, [vendors]);
+
+  // Filtered vendors
+  const filteredVendors = useMemo(() => {
+    return vendors.filter(v => {
+      const name = (v.nome_fantasia || v.razao_social || "").trim();
+      if (filters.name.length && !filters.name.includes(name)) return false;
+      if (filters.cnpj.length && !filters.cnpj.includes(v.cnpj?.trim() || "")) return false;
+      if (filters.category.length && !filters.category.includes(v.category?.trim() || "")) return false;
+      if (filters.state.length && !filters.state.includes(v.state?.trim() || "")) return false;
+      return true;
+    });
+  }, [vendors, filters]);
+
+  const hasActiveFilters = Object.values(filters).some(f => f.length > 0);
+
+  const clearFilters = () => setFilters({ name: [], cnpj: [], category: [], state: [] });
+
+  const toggleFilter = (key: FilterKey, value: string) => {
+    setFilters(prev => {
+      const arr = prev[key];
+      return { ...prev, [key]: arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value] };
+    });
+  };
+
+  const openNew = () => { setEditId(null); setViewMode(false); setForm({ ...emptyForm }); setDialogOpen(true); };
+
+  const openView = async (vendorId: string) => {
+    const { data } = await supabase.from("study_vendors").select("*").eq("id", vendorId).single();
+    if (!data) return;
+    setEditId(vendorId);
+    setViewMode(true);
+    populateForm(data);
+    setDialogOpen(true);
+  };
 
   const openEdit = async (vendorId: string) => {
     const { data } = await supabase.from("study_vendors").select("*").eq("id", vendorId).single();
     if (!data) return;
     setEditId(vendorId);
+    setViewMode(false);
+    populateForm(data);
+    setDialogOpen(true);
+  };
+
+  const populateForm = (data: any) => {
     setForm({
       cnpj: data.cnpj || "", razao_social: data.razao_social || "", nome_fantasia: data.nome_fantasia || "",
       category: data.category || "", email: data.email || "", phone: data.phone || "",
       street: data.street || "", street_number: data.street_number || "", complement: data.complement || "",
       neighborhood: data.neighborhood || "", city: data.city || "", state: data.state || "", notes: data.notes || "",
     });
-    setDialogOpen(true);
+  };
+
+  const lookupCNPJHandler = async () => {
+    const clean = form.cnpj.replace(/\D/g, "");
+    if (clean.length !== 14) { toast.error("CNPJ deve ter 14 dígitos."); return; }
+    setLookingUp(true);
+    const result = await lookupCNPJ(clean);
+    setLookingUp(false);
+    if (!result.ok || !result.data) { toast.error(result.error || "Erro ao buscar CNPJ."); return; }
+    const d = result.data;
+    setForm(f => ({
+      ...f,
+      razao_social: d.razao_social || f.razao_social,
+      nome_fantasia: d.nome_fantasia || f.nome_fantasia,
+      phone: d.telefone || f.phone,
+      email: d.email || f.email,
+      street: d.logradouro || f.street,
+      street_number: d.numero || f.street_number,
+      complement: d.complemento || f.complement,
+      neighborhood: d.bairro || f.neighborhood,
+      city: d.municipio || f.city,
+      state: d.uf || f.state,
+    }));
+    toast.success("Dados do CNPJ preenchidos!");
   };
 
   const saveVendor = async () => {
-    if (!form.razao_social.trim() && !form.nome_fantasia.trim()) {
-      toast.error("Informe a razão social ou nome fantasia."); return;
+    const errors: string[] = [];
+    if (!form.cnpj.trim()) errors.push("CNPJ");
+    if (!form.razao_social.trim()) errors.push("Razão Social");
+    if (!form.nome_fantasia.trim()) errors.push("Nome Fantasia");
+    if (!form.category.trim()) errors.push("Categoria");
+    if (!form.email.trim()) errors.push("E-mail");
+    if (!form.phone.trim()) errors.push("Telefone");
+    if (!form.street.trim()) errors.push("Logradouro");
+    if (!form.street_number.trim()) errors.push("Número");
+    if (!form.neighborhood.trim()) errors.push("Bairro");
+    if (!form.city.trim()) errors.push("Cidade");
+    if (!form.state.trim()) errors.push("UF");
+    if (errors.length) {
+      toast.error(`Campos obrigatórios: ${errors.join(", ")}`);
+      return;
     }
     setSaving(true);
     const payload = { ...form, study_id: studyId! };
@@ -104,66 +213,172 @@ export default function VendorsPage() {
   return (
     <div className="min-h-screen bg-background">
       <GlobalTopbar />
-      <div className="max-w-4xl mx-auto px-6 py-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate(`/studies/${studyId}/dashboard`)}>
-              <ArrowLeft className="h-4 w-4 mr-1" /> Dashboard
-            </Button>
-            <h1 className="text-xl font-bold">Fornecedores</h1>
+      <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+        <h1 className="text-xl font-bold">Fornecedores</h1>
+
+        <Button size="sm" onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Novo Fornecedor</Button>
+
+        {/* Filters */}
+        {vendors.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium">Filtros:</span>
+            {(["name", "cnpj", "category", "state"] as FilterKey[]).map(key => {
+              const labels: Record<FilterKey, string> = { name: "Nome", cnpj: "CNPJ", category: "Categoria", state: "UF" };
+              const options = filterOptions[key];
+              if (!options.length) return null;
+              return (
+                <FilterDropdown
+                  key={key}
+                  label={labels[key]}
+                  options={options}
+                  selected={filters[key]}
+                  onToggle={(val) => toggleFilter(key, val)}
+                />
+              );
+            })}
+            {hasActiveFilters && (
+              <Button variant="outline" size="sm" onClick={clearFilters}>Limpar</Button>
+            )}
           </div>
-          <Button size="sm" onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Novo</Button>
-        </div>
+        )}
 
         {loading ? (
           <div className="flex justify-center py-12"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>
-        ) : vendors.length === 0 ? (
+        ) : filteredVendors.length === 0 ? (
           <div className="card-dashboard text-center py-12">
-            <p className="text-muted-foreground">Nenhum fornecedor cadastrado.</p>
+            <p className="text-muted-foreground">Nenhum fornecedor encontrado.</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {vendors.map(v => (
-              <div key={v.id} className="card-dashboard flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-sm">{v.nome_fantasia || v.razao_social}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {[v.cnpj, v.category, v.city && v.state ? `${v.city}/${v.state}` : null].filter(Boolean).join(" · ") || "—"}
-                  </p>
-                </div>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => openEdit(v.id)}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="sm" onClick={() => setDeleteId(v.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                </div>
-              </div>
-            ))}
+          <div className="relative w-full overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>CNPJ</TableHead>
+                  <TableHead>Categoria</TableHead>
+                  <TableHead>Cidade/UF</TableHead>
+                  <TableHead className="text-right">Opções</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredVendors.map(v => (
+                  <TableRow key={v.id}>
+                    <TableCell className="font-medium">{v.nome_fantasia || v.razao_social || "—"}</TableCell>
+                    <TableCell>{v.cnpj || "—"}</TableCell>
+                    <TableCell>{v.category || "—"}</TableCell>
+                    <TableCell>{v.city && v.state ? `${v.city}/${v.state}` : "—"}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openView(v.id)} title="Visualizar"><Eye className="h-4 w-4 text-primary" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(v.id)} title="Editar"><Pencil className="h-4 w-4 text-amber-600" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => setDeleteId(v.id)} title="Excluir"><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         )}
+
+        <Button variant="outline" size="sm" onClick={() => navigate(`/studies/${studyId}/dashboard`)}>
+          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar ao dashboard
+        </Button>
       </div>
 
       {/* Form Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editId ? "Editar Fornecedor" : "Novo Fornecedor"}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{viewMode ? "Visualizar Fornecedor" : editId ? "Editar Fornecedor" : "Novo Fornecedor"}</DialogTitle>
+          </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5 col-span-2"><Label>CNPJ</Label><Input value={form.cnpj} onChange={e => setField("cnpj", e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>Razão Social</Label><Input value={form.razao_social} onChange={e => setField("razao_social", e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>Nome Fantasia</Label><Input value={form.nome_fantasia} onChange={e => setField("nome_fantasia", e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>Categoria</Label><Input value={form.category} onChange={e => setField("category", e.target.value)} placeholder="Ex: Material, Mão de obra" /></div>
-            <div className="space-y-1.5"><Label>Telefone</Label><Input value={form.phone} onChange={e => setField("phone", e.target.value)} /></div>
-            <div className="space-y-1.5 col-span-2"><Label>E-mail</Label><Input type="email" value={form.email} onChange={e => setField("email", e.target.value)} /></div>
-            <div className="space-y-1.5 col-span-2"><Label>Logradouro</Label><Input value={form.street} onChange={e => setField("street", e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>Número</Label><Input value={form.street_number} onChange={e => setField("street_number", e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>Complemento</Label><Input value={form.complement} onChange={e => setField("complement", e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>Bairro</Label><Input value={form.neighborhood} onChange={e => setField("neighborhood", e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>Cidade</Label><Input value={form.city} onChange={e => setField("city", e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>UF</Label><Input value={form.state} onChange={e => setField("state", e.target.value)} maxLength={2} /></div>
-            <div className="space-y-1.5 col-span-2"><Label>Observações</Label><Textarea value={form.notes} onChange={e => setField("notes", e.target.value)} rows={2} /></div>
+            {/* CNPJ row: half width + button */}
+            <div className="space-y-1.5">
+              <Label>CNPJ *</Label>
+              <Input
+                value={form.cnpj}
+                onChange={e => setField("cnpj", formatCNPJ(e.target.value))}
+                placeholder="xx.xxx.xxx/xxxx-xx"
+                maxLength={18}
+                disabled={viewMode}
+              />
+            </div>
+            <div className="space-y-1.5 flex flex-col justify-end">
+              {!viewMode && (
+                <Button size="sm" variant="outline" onClick={lookupCNPJHandler} disabled={lookingUp}>
+                  {lookingUp ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  Buscar CNPJ
+                </Button>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Razão Social *</Label>
+              <Input value={form.razao_social} onChange={e => setField("razao_social", e.target.value)} disabled={viewMode} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Nome Fantasia *</Label>
+              <Input value={form.nome_fantasia} onChange={e => setField("nome_fantasia", e.target.value)} disabled={viewMode} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Categoria *</Label>
+              <Input value={form.category} onChange={e => setField("category", e.target.value)} placeholder="Ex: Material, Mão de obra" disabled={viewMode} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Telefone *</Label>
+              <Input
+                value={form.phone}
+                onChange={e => setField("phone", formatPhone(e.target.value))}
+                placeholder="(xx)xxxxx-xxxx"
+                maxLength={14}
+                disabled={viewMode}
+              />
+            </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label>E-mail *</Label>
+              <Input type="email" value={form.email} onChange={e => setField("email", e.target.value)} disabled={viewMode} />
+            </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label>Logradouro *</Label>
+              <Input value={form.street} onChange={e => setField("street", e.target.value)} disabled={viewMode} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Número *</Label>
+              <Input value={form.street_number} onChange={e => setField("street_number", e.target.value)} disabled={viewMode} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Complemento</Label>
+              <Input value={form.complement} onChange={e => setField("complement", e.target.value)} disabled={viewMode} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Bairro *</Label>
+              <Input value={form.neighborhood} onChange={e => setField("neighborhood", e.target.value)} disabled={viewMode} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Cidade *</Label>
+              <Input value={form.city} onChange={e => setField("city", e.target.value)} disabled={viewMode} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>UF *</Label>
+              <Input value={form.state} onChange={e => setField("state", e.target.value)} maxLength={2} disabled={viewMode} />
+            </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label>Observações</Label>
+              <Textarea value={form.notes} onChange={e => setField("notes", e.target.value)} rows={2} disabled={viewMode} />
+            </div>
           </div>
-          <div className="flex gap-3 pt-2">
-            <Button onClick={saveVendor} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
-            <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-          </div>
+          {!viewMode && (
+            <div className="flex gap-3 pt-2">
+              <Button onClick={saveVendor} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
+              <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            </div>
+          )}
+          {viewMode && (
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" onClick={() => { setViewMode(false); }}>Editar</Button>
+              <Button variant="ghost" onClick={() => setDialogOpen(false)}>Fechar</Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -181,5 +396,35 @@ export default function VendorsPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/* ---------- Filter Dropdown Component ---------- */
+function FilterDropdown({ label, options, selected, onToggle }: {
+  label: string;
+  options: string[];
+  selected: string[];
+  onToggle: (val: string) => void;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="text-xs">
+          {label} {selected.length > 0 && <span className="ml-1 bg-primary text-primary-foreground rounded-full px-1.5 text-[10px]">{selected.length}</span>}
+          <span className="ml-1">▾</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-2 max-h-60 overflow-y-auto" align="start">
+        {options.map(opt => (
+          <label key={opt} className="flex items-center gap-2 py-1 px-1 hover:bg-accent rounded cursor-pointer text-sm">
+            <Checkbox
+              checked={selected.includes(opt)}
+              onCheckedChange={() => onToggle(opt)}
+            />
+            <span className="truncate">{opt}</span>
+          </label>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }

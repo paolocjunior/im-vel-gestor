@@ -81,6 +81,10 @@ export default function StepBPage() {
       updateData.financing_term_months = null;
       updateData.monthly_interest_rate = 0;
     }
+    // Also sync down_payment_acquisition when financing is enabled
+    if (form.financing_enabled && form.down_payment_value > 0) {
+      updateData.down_payment_acquisition = form.down_payment_value;
+    }
     const { error } = await supabase.from("study_inputs").update(updateData).eq("study_id", id);
     if (error) { toast.error("Erro ao salvar."); setSaving(false); return; }
     await recomputeAndSave(id!, user!.id);
