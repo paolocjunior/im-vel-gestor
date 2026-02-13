@@ -12,6 +12,11 @@ import StudyDashboard from "./pages/StudyDashboard";
 import EditStudyPage from "./pages/EditStudyPage";
 import StepAPage from "./pages/StepAPage";
 import StepBPage from "./pages/StepBPage";
+import StepCPage from "./pages/StepCPage";
+import StepDPage from "./pages/StepDPage";
+import StepEPage from "./pages/StepEPage";
+import VendorsPage from "./pages/VendorsPage";
+import ProvidersPage from "./pages/ProvidersPage";
 import SettingsPage from "./pages/SettingsPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import NotFound from "./pages/NotFound";
@@ -38,6 +43,11 @@ const App = () => (
             <Route path="/studies/:id/edit" element={<P><EditStudyPage /></P>} />
             <Route path="/studies/:id/steps/a" element={<P><StepAPage /></P>} />
             <Route path="/studies/:id/steps/b" element={<P><StepBPage /></P>} />
+            <Route path="/studies/:id/steps/c" element={<P><StepCPage /></P>} />
+            <Route path="/studies/:id/steps/d" element={<P><StepDPage /></P>} />
+            <Route path="/studies/:id/steps/e" element={<P><StepEPage /></P>} />
+            <Route path="/studies/:id/vendors" element={<P><VendorsPage /></P>} />
+            <Route path="/studies/:id/providers" element={<P><ProvidersPage /></P>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
