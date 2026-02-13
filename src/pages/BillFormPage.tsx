@@ -535,7 +535,7 @@ export default function BillFormPage() {
         <fieldset className="border rounded-lg p-4 space-y-2">
           <legend className="font-bold text-sm px-2">Anexos:</legend>
           <p className="text-sm text-muted-foreground">
-            {isNew || isClone ? "Salve a despesa para habilitar anexos." : "Funcionalidade de anexos em breve."}
+            Funcionalidade de anexos em breve.
           </p>
         </fieldset>
 
