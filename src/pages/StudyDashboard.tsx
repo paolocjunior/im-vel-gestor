@@ -200,13 +200,13 @@ const StudyDashboard = () => {
           <aside className="md:col-span-3 order-3 space-y-4">
             <h2 className="font-bold text-base">Resultados</h2>
 
-            <ResultCard label="Total custos aquisição" value={fmtMoney(computed?.acquisition_total)} subtitle="Valor de compra" />
-            <ResultCard label="Total custos até venda" value={fmtMoney(computed?.holding_total)} subtitle="Meses até a venda" />
-            <ResultCard label="Custos desembolsados" value={fmtMoney(computed?.total_disbursed)} subtitle="Valor de compra e meses até a venda" />
-            <ResultCard label="Lucro" value={fmtMoney(computed?.profit)} subtitle="Valor de venda" />
-            <ResultCard label="ROI" value={fmtPct(computed?.roi)} subtitle="Capital investido e valor de venda" />
+            <ResultCard label="Total custos aquisição" value={fmtMoney(computed?.acquisition_total)} subtitle="Completo" colorClass="result-acquisition" />
+            <ResultCard label="Total custos até venda" value={fmtMoney(computed?.holding_total)} subtitle="Completo" colorClass="result-holding" />
+            <ResultCard label="Custos desembolsados" value={fmtMoney(computed?.total_disbursed)} subtitle="Completo" colorClass="result-disbursed" />
+            <ResultCard label="Lucro" value={fmtMoney(computed?.profit)} subtitle="Completo" colorClass="result-profit" />
+            <ResultCard label="ROI" value={fmtPct(computed?.roi)} subtitle="Completo" colorClass="result-roi" />
 
-            <div className="card-dashboard space-y-3">
+            <div className="card-dashboard result-indicator space-y-3">
               <p className="text-xs font-semibold">Indicador</p>
               <p className={`kpi-value ${viabilityColor[viability]}`}>{viabilityLabel[viability]}</p>
               {missingFields.length > 0 && (
