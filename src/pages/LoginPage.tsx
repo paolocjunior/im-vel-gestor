@@ -29,12 +29,12 @@ const LoginPage = () => {
       <div className="hidden lg:flex lg:w-1/2 bg-primary flex-col justify-between p-12">
         <div className="flex items-center gap-3">
           <Building2 className="h-8 w-8 text-accent" />
-          <span className="font-heading text-2xl font-bold text-primary-foreground">
-            Constru<span className="text-accent">Gestão</span>
+          <span className="text-2xl font-bold text-primary-foreground">
+            Constru<span className="text-primary">Gestão</span>
           </span>
         </div>
         <div className="space-y-4">
-          <h1 className="font-heading text-4xl font-bold text-primary-foreground leading-tight">
+          <h1 className="text-4xl font-bold text-primary-foreground leading-tight">
             Gestão inteligente de<br />
             projetos imobiliários
           </h1>
@@ -51,14 +51,14 @@ const LoginPage = () => {
       <div className="flex w-full lg:w-1/2 items-center justify-center p-8">
         <div className="w-full max-w-md space-y-8 animate-fade-in">
           <div className="lg:hidden flex items-center gap-3 justify-center mb-8">
-            <Building2 className="h-8 w-8 text-accent" />
-            <span className="font-heading text-2xl font-bold">
-              Constru<span className="text-accent">Gestão</span>
+            <Building2 className="h-8 w-8 text-primary" />
+            <span className="text-2xl font-bold">
+              Constru<span className="text-primary">Gestão</span>
             </span>
           </div>
 
           <div className="space-y-2 text-center">
-            <h2 className="font-heading text-2xl font-bold">
+            <h2 className="text-2xl font-bold">
               {isSignUp ? "Criar conta" : "Bem-vindo de volta"}
             </h2>
             <p className="text-muted-foreground">
@@ -118,7 +118,7 @@ const LoginPage = () => {
             {isSignUp ? "Já tem uma conta?" : "Não tem uma conta?"}{" "}
             <button
               onClick={() => setIsSignUp(!isSignUp)}
-              className="text-accent font-medium hover:underline"
+              className="text-primary font-medium hover:underline"
             >
               {isSignUp ? "Fazer login" : "Criar conta"}
             </button>

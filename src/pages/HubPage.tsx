@@ -49,9 +49,9 @@ const HubPage = () => {
       <header className="border-b bg-card">
         <div className="container flex items-center justify-between h-16 px-6">
           <div className="flex items-center gap-3">
-            <Building2 className="h-7 w-7 text-accent" />
-            <span className="font-heading text-xl font-bold">
-              Constru<span className="text-accent">Gestão</span>
+            <Building2 className="h-7 w-7 text-primary" />
+            <span className="text-xl font-bold">
+              Constru<span className="text-primary">Gestão</span>
             </span>
           </div>
           <Button variant="ghost" size="sm" onClick={() => navigate("/login")}>
@@ -65,12 +65,12 @@ const HubPage = () => {
         {/* Barra de ações */}
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
           <div>
-            <h1 className="font-heading text-3xl font-bold">Meus Projetos</h1>
+            <h1 className="text-3xl font-bold">Meus Projetos</h1>
             <p className="text-muted-foreground mt-1">
               Gerencie seus estudos e empreendimentos
             </p>
           </div>
-          <Button className="bg-accent text-accent-foreground hover:bg-accent/90">
+          <Button className="bg-primary text-primary-foreground hover:bg-primary-hover">
             <Plus className="h-4 w-4 mr-2" />
             Novo Projeto
           </Button>
@@ -91,12 +91,12 @@ const HubPage = () => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card>
             <CardContent className="flex items-center gap-4 p-5">
-              <div className="rounded-lg bg-accent/10 p-3">
-                <FolderOpen className="h-5 w-5 text-accent" />
+              <div className="rounded-lg bg-primary/10 p-3">
+                <FolderOpen className="h-5 w-5 text-primary" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total de Projetos</p>
-                <p className="font-heading text-2xl font-bold">{mockProjects.length}</p>
+                <p className="kpi-value">{mockProjects.length}</p>
               </div>
             </CardContent>
           </Card>
@@ -107,7 +107,7 @@ const HubPage = () => {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Em Andamento</p>
-                <p className="font-heading text-2xl font-bold">
+                <p className="kpi-value">
                   {mockProjects.filter((p) => p.status === "em_obra").length}
                 </p>
               </div>
@@ -120,7 +120,7 @@ const HubPage = () => {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Concluídos</p>
-                <p className="font-heading text-2xl font-bold">
+                <p className="kpi-value">
                   {mockProjects.filter((p) => p.status === "concluido").length}
                 </p>
               </div>
@@ -138,7 +138,7 @@ const HubPage = () => {
             >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
-                  <CardTitle className="font-heading text-lg group-hover:text-accent transition-colors">
+                  <CardTitle className="text-lg group-hover:text-primary transition-colors">
                     {project.name}
                   </CardTitle>
                   <Badge variant={statusMap[project.status].variant}>
