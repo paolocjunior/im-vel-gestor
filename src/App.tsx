@@ -17,6 +17,8 @@ import StepDPage from "./pages/StepDPage";
 import StepEPage from "./pages/StepEPage";
 import VendorsPage from "./pages/VendorsPage";
 import ProvidersPage from "./pages/ProvidersPage";
+import ProviderFormPage from "./pages/ProviderFormPage";
+import ProviderDetailPage from "./pages/ProviderDetailPage";
 import SettingsPage from "./pages/SettingsPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import NotFound from "./pages/NotFound";
@@ -48,6 +50,9 @@ const App = () => (
             <Route path="/studies/:id/steps/e" element={<P><StepEPage /></P>} />
             <Route path="/studies/:id/vendors" element={<P><VendorsPage /></P>} />
             <Route path="/studies/:id/providers" element={<P><ProvidersPage /></P>} />
+            <Route path="/studies/:id/providers/new" element={<P><ProviderFormPage /></P>} />
+            <Route path="/studies/:id/providers/:providerId/edit" element={<P><ProviderFormPage /></P>} />
+            <Route path="/studies/:id/providers/:providerId/view" element={<P><ProviderDetailPage /></P>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
