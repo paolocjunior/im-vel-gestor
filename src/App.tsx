@@ -9,11 +9,16 @@ import LoginPage from "./pages/LoginPage";
 import PasswordResetPage from "./pages/PasswordResetPage";
 import HubPage from "./pages/HubPage";
 import StudyDashboard from "./pages/StudyDashboard";
+import EditStudyPage from "./pages/EditStudyPage";
+import StepAPage from "./pages/StepAPage";
+import StepBPage from "./pages/StepBPage";
 import SettingsPage from "./pages/SettingsPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+const P = ({ children }: { children: React.ReactNode }) => <ProtectedRoute>{children}</ProtectedRoute>;
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -26,10 +31,13 @@ const App = () => (
             <Route path="/" element={<Navigate to="/hub" replace />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/password-reset" element={<PasswordResetPage />} />
-            <Route path="/hub" element={<ProtectedRoute><HubPage /></ProtectedRoute>} />
-            <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-            <Route path="/settings/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
-            <Route path="/studies/:id/dashboard" element={<ProtectedRoute><StudyDashboard /></ProtectedRoute>} />
+            <Route path="/hub" element={<P><HubPage /></P>} />
+            <Route path="/settings" element={<P><SettingsPage /></P>} />
+            <Route path="/settings/change-password" element={<P><ChangePasswordPage /></P>} />
+            <Route path="/studies/:id/dashboard" element={<P><StudyDashboard /></P>} />
+            <Route path="/studies/:id/edit" element={<P><EditStudyPage /></P>} />
+            <Route path="/studies/:id/steps/a" element={<P><StepAPage /></P>} />
+            <Route path="/studies/:id/steps/b" element={<P><StepBPage /></P>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
