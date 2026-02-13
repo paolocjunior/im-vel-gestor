@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { recomputeAndSave } from "@/lib/recomputeService";
 import { formatBRL } from "@/lib/recompute";
+import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 
 export default function StepBPage() {
   const { id } = useParams();
@@ -48,7 +49,7 @@ export default function StepBPage() {
     setLoading(false);
   };
 
-  const setNum = (k: string, v: string) => setForm(f => ({ ...f, [k]: Number(v) || 0 }));
+  const setNum = (k: string, v: number) => setForm(f => ({ ...f, [k]: v }));
 
   const validate = (): string[] => {
     const errors: string[] = [];
@@ -83,7 +84,6 @@ export default function StepBPage() {
     const { error } = await supabase.from("study_inputs").update(updateData).eq("study_id", id);
     if (error) { toast.error("Erro ao salvar."); setSaving(false); return; }
     await recomputeAndSave(id!, user!.id);
-    // Reload computed for summary
     const { data: newComputed } = await supabase.from("study_computed").select("financed_amount, first_installment, last_installment, total_paid_financing, total_interest").eq("study_id", id).single();
     if (newComputed) setComputed(newComputed);
     setSaving(false);
@@ -120,15 +120,15 @@ export default function StepBPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Entrada (R$)</Label>
-                <Input type="number" step="0.01" min="0" value={form.down_payment_value || ""} onChange={e => setNum("down_payment_value", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+                <MaskedNumberInput value={form.down_payment_value} onValueChange={v => setNum("down_payment_value", v)} />
               </div>
               <div className="space-y-1.5">
                 <Label>Prazo (meses)</Label>
-                <Input type="number" min="1" value={form.financing_term_months || ""} onChange={e => setNum("financing_term_months", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+                <MaskedNumberInput value={form.financing_term_months} onValueChange={v => setNum("financing_term_months", v)} decimals={0} />
               </div>
               <div className="space-y-1.5">
                 <Label>Juros mensal (%)</Label>
-                <Input type="number" step="0.0001" min="0" value={form.monthly_interest_rate || ""} onChange={e => setNum("monthly_interest_rate", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+                <MaskedNumberInput value={form.monthly_interest_rate} onValueChange={v => setNum("monthly_interest_rate", v)} decimals={4} />
               </div>
             </div>
           ) : (
@@ -137,7 +137,6 @@ export default function StepBPage() {
             </div>
           )}
 
-          {/* Resumo */}
           {form.financing_enabled && computed && Number(computed.financed_amount) > 0 && (
             <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-2">
               <h3 className="font-bold text-sm">Resumo do Financiamento</h3>

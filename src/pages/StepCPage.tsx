@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import GlobalTopbar from "@/components/GlobalTopbar";
@@ -9,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { recomputeAndSave } from "@/lib/recomputeService";
+import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 
 export default function StepCPage() {
   const { id } = useParams();
@@ -48,9 +48,8 @@ export default function StepCPage() {
     setLoading(false);
   };
 
-  const setNum = (k: string, v: string) => setForm(f => ({ ...f, [k]: Number(v) || 0 }));
+  const setNum = (k: string, v: number) => setForm(f => ({ ...f, [k]: v }));
 
-  // Auto-calc ITBI when mode is PERCENT
   const itbiCalculated = form.itbi_mode === "PERCENT"
     ? Number(((purchaseValue * form.itbi_percent) / 100).toFixed(2))
     : form.itbi_value;
@@ -85,7 +84,7 @@ export default function StepCPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Entrada na aquisição (R$)</Label>
-              <Input type="number" step="0.01" min="0" value={form.down_payment_acquisition || ""} onChange={e => setNum("down_payment_acquisition", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.down_payment_acquisition} onValueChange={v => setNum("down_payment_acquisition", v)} />
             </div>
             <div className="space-y-1.5">
               <Label>Modo ITBI</Label>
@@ -100,26 +99,26 @@ export default function StepCPage() {
             {form.itbi_mode === "PERCENT" ? (
               <div className="space-y-1.5">
                 <Label>ITBI (%)</Label>
-                <Input type="number" step="0.01" min="0" value={form.itbi_percent || ""} onChange={e => setNum("itbi_percent", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+                <MaskedNumberInput value={form.itbi_percent} onValueChange={v => setNum("itbi_percent", v)} />
                 <p className="text-xs text-muted-foreground">Calculado: R$ {itbiCalculated.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
               </div>
             ) : (
               <div className="space-y-1.5">
                 <Label>ITBI (R$)</Label>
-                <Input type="number" step="0.01" min="0" value={form.itbi_value || ""} onChange={e => setNum("itbi_value", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+                <MaskedNumberInput value={form.itbi_value} onValueChange={v => setNum("itbi_value", v)} />
               </div>
             )}
             <div className="space-y-1.5">
               <Label>Avaliação bancária (R$)</Label>
-              <Input type="number" step="0.01" min="0" value={form.bank_appraisal || ""} onChange={e => setNum("bank_appraisal", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.bank_appraisal} onValueChange={v => setNum("bank_appraisal", v)} />
             </div>
             <div className="space-y-1.5">
               <Label>Registro (R$)</Label>
-              <Input type="number" step="0.01" min="0" value={form.registration_fee || ""} onChange={e => setNum("registration_fee", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.registration_fee} onValueChange={v => setNum("registration_fee", v)} />
             </div>
             <div className="space-y-1.5">
               <Label>Escritura (R$)</Label>
-              <Input type="number" step="0.01" min="0" value={form.deed_fee || ""} onChange={e => setNum("deed_fee", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.deed_fee} onValueChange={v => setNum("deed_fee", v)} />
             </div>
           </div>
           <div className="flex gap-3 pt-2">

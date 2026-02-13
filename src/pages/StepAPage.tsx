@@ -1,17 +1,14 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Loader2 } from "lucide-react";
 import GlobalTopbar from "@/components/GlobalTopbar";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { recomputeAndSave } from "@/lib/recomputeService";
-import { formatBRL } from "@/lib/recompute";
+import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 
 export default function StepAPage() {
   const { id } = useParams();
@@ -43,7 +40,7 @@ export default function StepAPage() {
     setLoading(false);
   };
 
-  const setNum = (k: string, v: string) => setForm(f => ({ ...f, [k]: Number(v) || 0 }));
+  const setNum = (k: string, v: number) => setForm(f => ({ ...f, [k]: v }));
 
   const validate = (): string[] => {
     const errors: string[] = [];
@@ -87,23 +84,23 @@ export default function StepAPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Valor de compra (R$)</Label>
-              <Input type="number" step="0.01" min="0" value={form.purchase_value || ""} onChange={e => setNum("purchase_value", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.purchase_value} onValueChange={v => setNum("purchase_value", v)} />
             </div>
             <div className="space-y-1.5">
               <Label>Área útil (m²)</Label>
-              <Input type="number" step="0.01" min="0" value={form.usable_area_m2 || ""} onChange={e => setNum("usable_area_m2", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.usable_area_m2} onValueChange={v => setNum("usable_area_m2", v)} />
             </div>
             <div className="space-y-1.5">
               <Label>Área total (m²)</Label>
-              <Input type="number" step="0.01" min="0" value={form.total_area_m2 || ""} onChange={e => setNum("total_area_m2", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.total_area_m2} onValueChange={v => setNum("total_area_m2", v)} />
             </div>
             <div className="space-y-1.5">
               <Label>Área do terreno (m²)</Label>
-              <Input type="number" step="0.01" min="0" value={form.land_area_m2 || ""} onChange={e => setNum("land_area_m2", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.land_area_m2} onValueChange={v => setNum("land_area_m2", v)} />
             </div>
             <div className="space-y-1.5">
               <Label>Valor do m² (R$)</Label>
-              <Input type="number" step="0.01" min="0" value={form.purchase_price_per_m2 || ""} onChange={e => { setNum("purchase_price_per_m2", e.target.value); setForm(f => ({ ...f, price_per_m2_manual: true })); }} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.purchase_price_per_m2} onValueChange={v => { setNum("purchase_price_per_m2", v); setForm(f => ({ ...f, price_per_m2_manual: true })); }} />
             </div>
             <div className="flex items-center gap-2 pt-6">
               <Switch checked={form.price_per_m2_manual} onCheckedChange={v => setForm(f => ({ ...f, price_per_m2_manual: v }))} />
