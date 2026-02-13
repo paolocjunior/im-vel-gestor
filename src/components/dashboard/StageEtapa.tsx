@@ -3,10 +3,10 @@ import { Button } from "@/components/ui/button";
 type StageStatus = "nao_iniciado" | "incompleto" | "completo" | "dispensado";
 
 const statusConfig: Record<StageStatus, { label: string; className: string }> = {
-  nao_iniciado: { label: "Não iniciado", className: "bg-neutral/10 text-neutral" },
-  incompleto: { label: "Incompleto", className: "bg-warning/10 text-warning" },
-  completo: { label: "Completo", className: "bg-success/10 text-success" },
-  dispensado: { label: "Dispensado", className: "bg-info/10 text-info" },
+  nao_iniciado: { label: "Não iniciado", className: "bg-[#e5e7eb] text-[#374151]" },
+  incompleto: { label: "Incompleto", className: "bg-[#fef3c7] text-[#b45309]" },
+  completo: { label: "Completo", className: "bg-[#dcfce7] text-[#166534]" },
+  dispensado: { label: "Dispensado", className: "bg-[#dbeafe] text-[#1d4ed8]" },
 };
 
 interface FieldPair {
