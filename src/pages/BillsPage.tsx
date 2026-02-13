@@ -403,7 +403,7 @@ export default function BillsPage() {
                         <SelectTrigger className="w-28 h-8 text-xs"><SelectValue placeholder="Opções" /></SelectTrigger>
                         <SelectContent>
                           {inst.status === "PAID" ? (
-                            <SelectItem value="reopen">Voltar p/ Aberto</SelectItem>
+                            <SelectItem value="reopen">Voltar p/ Pendente</SelectItem>
                           ) : (
                             <SelectItem value="pay">Informar Pagamento</SelectItem>
                           )}
