@@ -77,7 +77,7 @@ export default function StepEPage() {
     if (error) { toast.error("Erro ao salvar."); setSaving(false); return; }
     await recomputeAndSave(id!, user!.id);
     setSaving(false);
-    toast.success("Etapa E salva!");
+    toast.success("Dados da venda salvos!");
     if (goBack) navigate(`/studies/${id}/dashboard`);
   };
 
@@ -88,7 +88,7 @@ export default function StepEPage() {
       <GlobalTopbar />
       <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
         <div className="card-dashboard space-y-5">
-          <h2 className="font-bold text-lg">Etapa E — Dados da Venda</h2>
+          <h2 className="font-bold text-lg">Dados da Venda</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Valor de venda (R$)</Label>

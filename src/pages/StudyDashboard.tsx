@@ -188,25 +188,6 @@ const StudyDashboard = () => {
                   ]}
                   onEdit={() => navigate(`/studies/${id}/steps/e`)} />
 
-                <StageEtapa title="Custos até a Venda" status={getStepStatus(inputs, "d")} colorClass="stage-pink"
-                  fields={[
-                    { label: "Meses até a venda", value: dash(inputs.months_to_sale) },
-                    { label: "Parcela financiamento", value: fmtMoney(inputs.monthly_financing_payment) },
-                    { label: "Condomínio", value: fmtMoney(inputs.condo_fee) },
-                    { label: "IPTU", value: fmtMoney(inputs.iptu_value) },
-                    { label: "Despesas mensais", value: fmtMoney(inputs.monthly_expenses) },
-                    { label: "Prestador/Contratos", value: fmtMoney(computed?.provider_contracts_total) },
-                  ]}
-                  onEdit={() => navigate(`/studies/${id}/steps/d`)} />
-
-                <StageEtapa title="Dados da Venda" status={getStepStatus(inputs, "e")} colorClass="stage-blue"
-                  fields={[
-                    { label: "Valor de venda", value: fmtMoney(inputs.sale_value) },
-                    { label: "Quitação na venda", value: fmtMoney(inputs.payoff_at_sale) },
-                    { label: "Corretagem", value: inputs.brokerage_mode === "PERCENT" ? `${inputs.brokerage_percent}%` : fmtMoney(inputs.brokerage_value) },
-                    { label: "Imposto de renda", value: fmtMoney(inputs.income_tax) },
-                  ]}
-                  onEdit={() => navigate(`/studies/${id}/steps/e`)} />
               </>
             )}
           </section>
