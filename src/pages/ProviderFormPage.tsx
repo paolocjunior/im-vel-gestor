@@ -119,7 +119,20 @@ export default function ProviderFormPage() {
       .select("id, service, amount, billing_model, start_date, end_date, status, details")
       .eq("provider_id", providerId).eq("study_id", studyId).eq("is_deleted", false)
       .order("start_date", { ascending: true });
-    setContracts((data || []).map(c => ({ ...c, amount: Number(c.amount), end_date: c.end_date || null, details: c.details || null })));
+    const mapped = (data || []).map(c => ({ ...c, amount: Number(c.amount), end_date: c.end_date || null, details: c.details || null }));
+    setContracts(mapped);
+    // Auto-open contract for editing if contractId is in URL
+    const urlContractId = searchParams.get("contractId");
+    if (urlContractId) {
+      const target = mapped.find(c => c.id === urlContractId);
+      if (target) {
+        setEditingContractId(target.id);
+        setContractForm({
+          service: target.service, amount: target.amount, billing_model: target.billing_model,
+          start_date: target.start_date, end_date: target.end_date || "", status: target.status, details: target.details || "",
+        });
+      }
+    }
   };
 
   const loadPayments = async () => {
