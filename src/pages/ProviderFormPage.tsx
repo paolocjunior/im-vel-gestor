@@ -570,7 +570,7 @@ export default function ProviderFormPage() {
                             <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
                             <SelectContent>
                               {contracts.filter(c => c.status === "ACTIVE").map((c) => (
-                                <SelectItem key={c.id} value={c.id}>{c.service} ({c.start_date})</SelectItem>
+                                <SelectItem key={c.id} value={c.id}>{c.service}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
