@@ -10,6 +10,7 @@ import GlobalTopbar from "@/components/GlobalTopbar";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 
 interface UserSettings {
   roi_viable_threshold: number;
@@ -121,28 +122,23 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>ROI mínimo Viável (%)</Label>
-                <Input type="number" step="0.01" value={settings.roi_viable_threshold}
-                  onChange={(e) => setSettings(s => ({ ...s, roi_viable_threshold: Number(e.target.value) }))} />
+                <MaskedNumberInput value={settings.roi_viable_threshold} onValueChange={v => setSettings(s => ({ ...s, roi_viable_threshold: v }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>ROI mínimo Atenção (%)</Label>
-                <Input type="number" step="0.01" value={settings.roi_attention_threshold}
-                  onChange={(e) => setSettings(s => ({ ...s, roi_attention_threshold: Number(e.target.value) }))} />
+                <MaskedNumberInput value={settings.roi_attention_threshold} onValueChange={v => setSettings(s => ({ ...s, roi_attention_threshold: v }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Entrada padrão (%)</Label>
-                <Input type="number" step="0.01" value={settings.default_down_payment_percent}
-                  onChange={(e) => setSettings(s => ({ ...s, default_down_payment_percent: Number(e.target.value) }))} />
+                <MaskedNumberInput value={settings.default_down_payment_percent} onValueChange={v => setSettings(s => ({ ...s, default_down_payment_percent: v }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Juros padrão mensal (%)</Label>
-                <Input type="number" step="0.0001" value={settings.default_monthly_interest}
-                  onChange={(e) => setSettings(s => ({ ...s, default_monthly_interest: Number(e.target.value) }))} />
+                <MaskedNumberInput value={settings.default_monthly_interest} onValueChange={v => setSettings(s => ({ ...s, default_monthly_interest: v }))} decimals={4} />
               </div>
               <div className="space-y-1.5">
                 <Label>Prazo padrão (meses)</Label>
-                <Input type="number" value={settings.default_term_months}
-                  onChange={(e) => setSettings(s => ({ ...s, default_term_months: Number(e.target.value) }))} />
+                <MaskedNumberInput value={settings.default_term_months} onValueChange={v => setSettings(s => ({ ...s, default_term_months: v }))} decimals={0} />
               </div>
             </div>
 

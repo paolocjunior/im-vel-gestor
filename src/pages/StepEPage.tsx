@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { recomputeAndSave } from "@/lib/recomputeService";
+import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 
 export default function StepEPage() {
   const { id } = useParams();
@@ -47,7 +48,7 @@ export default function StepEPage() {
     setLoading(false);
   };
 
-  const setNum = (k: string, v: string) => setForm(f => ({ ...f, [k]: Number(v) || 0 }));
+  const setNum = (k: string, v: number) => setForm(f => ({ ...f, [k]: v }));
 
   const brokerageCalculated = form.brokerage_mode === "PERCENT"
     ? Number(((form.sale_value * form.brokerage_percent) / 100).toFixed(2))
@@ -91,15 +92,15 @@ export default function StepEPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Valor de venda (R$)</Label>
-              <Input type="number" step="0.01" min="0" value={form.sale_value || ""} onChange={e => setNum("sale_value", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.sale_value} onValueChange={v => setNum("sale_value", v)} />
             </div>
             <div className="space-y-1.5">
               <Label>Preço/m² de venda (R$)</Label>
-              <Input type="number" step="0.01" min="0" value={form.sale_price_per_m2 || ""} onChange={e => setNum("sale_price_per_m2", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.sale_price_per_m2} onValueChange={v => setNum("sale_price_per_m2", v)} />
             </div>
             <div className="space-y-1.5">
               <Label>Quitação na venda (R$)</Label>
-              <Input type="number" value={form.payoff_at_sale} disabled className="bg-muted/30" />
+              <Input type="text" value={form.payoff_at_sale.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} disabled className="bg-muted/30" />
               <p className="text-xs text-muted-foreground">Calculado pela engine</p>
             </div>
             <div className="space-y-1.5">
@@ -115,18 +116,18 @@ export default function StepEPage() {
             {form.brokerage_mode === "PERCENT" ? (
               <div className="space-y-1.5">
                 <Label>Corretagem (%)</Label>
-                <Input type="number" step="0.01" min="0" value={form.brokerage_percent || ""} onChange={e => setNum("brokerage_percent", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+                <MaskedNumberInput value={form.brokerage_percent} onValueChange={v => setNum("brokerage_percent", v)} />
                 <p className="text-xs text-muted-foreground">Calculado: R$ {brokerageCalculated.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
               </div>
             ) : (
               <div className="space-y-1.5">
                 <Label>Corretagem (R$)</Label>
-                <Input type="number" step="0.01" min="0" value={form.brokerage_value || ""} onChange={e => setNum("brokerage_value", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+                <MaskedNumberInput value={form.brokerage_value} onValueChange={v => setNum("brokerage_value", v)} />
               </div>
             )}
             <div className="space-y-1.5">
               <Label>Imposto de renda (R$)</Label>
-              <Input type="number" step="0.01" min="0" value={form.income_tax || ""} onChange={e => setNum("income_tax", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.income_tax} onValueChange={v => setNum("income_tax", v)} />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Observações da venda</Label>

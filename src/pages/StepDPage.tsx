@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { recomputeAndSave } from "@/lib/recomputeService";
+import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 
 export default function StepDPage() {
   const { id } = useParams();
@@ -45,7 +46,7 @@ export default function StepDPage() {
     setLoading(false);
   };
 
-  const setNum = (k: string, v: string) => setForm(f => ({ ...f, [k]: Number(v) || 0 }));
+  const setNum = (k: string, v: number) => setForm(f => ({ ...f, [k]: v }));
 
   const validate = (): string[] => {
     const errors: string[] = [];
@@ -84,11 +85,11 @@ export default function StepDPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Meses até a venda</Label>
-              <Input type="number" min="1" value={form.months_to_sale || ""} onChange={e => setNum("months_to_sale", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.months_to_sale} onValueChange={v => setNum("months_to_sale", v)} decimals={0} />
             </div>
             <div className="space-y-1.5">
               <Label>Parcela financiamento (R$)</Label>
-              <Input type="number" value={form.monthly_financing_payment} disabled className="bg-muted/30" />
+              <Input type="text" value={form.monthly_financing_payment.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} disabled className="bg-muted/30" />
               <p className="text-xs text-muted-foreground">Calculado na Etapa B</p>
             </div>
             <div className="flex items-center gap-2 pt-4">
@@ -98,7 +99,7 @@ export default function StepDPage() {
             {form.has_condo_fee && (
               <div className="space-y-1.5">
                 <Label>Condomínio mensal (R$)</Label>
-                <Input type="number" step="0.01" min="0" value={form.condo_fee || ""} onChange={e => setNum("condo_fee", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+                <MaskedNumberInput value={form.condo_fee} onValueChange={v => setNum("condo_fee", v)} />
               </div>
             )}
             <div className="space-y-1.5">
@@ -113,11 +114,11 @@ export default function StepDPage() {
             </div>
             <div className="space-y-1.5">
               <Label>IPTU (R$) — {form.iptu_mode === "anual" ? "valor anual" : "valor mensal"}</Label>
-              <Input type="number" step="0.01" min="0" value={form.iptu_value || ""} onChange={e => setNum("iptu_value", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.iptu_value} onValueChange={v => setNum("iptu_value", v)} />
             </div>
             <div className="space-y-1.5">
               <Label>Outras despesas mensais (R$)</Label>
-              <Input type="number" step="0.01" min="0" value={form.monthly_expenses || ""} onChange={e => setNum("monthly_expenses", e.target.value)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={form.monthly_expenses} onValueChange={v => setNum("monthly_expenses", v)} />
             </div>
           </div>
           <div className="flex gap-3 pt-2">

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Pencil, Trash2, ArrowLeft, FileText } from "lucide-react";
 import {
@@ -305,7 +306,7 @@ export default function ProvidersPage() {
             <div className="space-y-1.5 col-span-2"><Label>Serviço *</Label><Input value={cForm.service} onChange={e => setCField("service", e.target.value)} /></div>
             <div className="space-y-1.5">
               <Label>Valor (R$)</Label>
-              <Input type="number" step="0.01" min="0" value={cForm.amount || ""} onChange={e => setCField("amount", Number(e.target.value) || 0)} onFocus={e => { if (Number(e.target.value) === 0) e.target.value = ""; }} />
+              <MaskedNumberInput value={cForm.amount} onValueChange={v => setCField("amount", v)} />
             </div>
             <div className="space-y-1.5">
               <Label>Modelo</Label>
