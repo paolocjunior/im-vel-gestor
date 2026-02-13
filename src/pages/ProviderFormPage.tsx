@@ -418,7 +418,18 @@ export default function ProviderFormPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Data Inicial *</Label>
-                  <Input type="date" value={contractForm.start_date} onChange={e => setContractForm(f => ({ ...f, start_date: e.target.value }))} />
+                  <Input type="date" value={contractForm.start_date} onChange={e => {
+                    const newStart = e.target.value;
+                    setContractForm(f => {
+                      const updated = { ...f, start_date: newStart };
+                      if (newStart && !f.end_date) {
+                        const next = new Date(newStart + "T12:00:00");
+                        next.setDate(next.getDate() + 1);
+                        updated.end_date = next.toISOString().split("T")[0];
+                      }
+                      return updated;
+                    });
+                  }} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Data Final</Label>
@@ -558,8 +569,8 @@ export default function ProviderFormPage() {
                           <Select value={p.contract_id} onValueChange={v => updatePayment(p._key, "contract_id", v)}>
                             <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
                             <SelectContent>
-                              {contracts.filter(c => c.status === "ACTIVE").map((c, i) => (
-                                <SelectItem key={c.id} value={c.id}>Contrato {i + 1}</SelectItem>
+                              {contracts.filter(c => c.status === "ACTIVE").map((c) => (
+                                <SelectItem key={c.id} value={c.id}>{c.service} ({c.start_date})</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
