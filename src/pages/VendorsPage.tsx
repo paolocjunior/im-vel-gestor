@@ -73,26 +73,37 @@ export default function VendorsPage() {
     setLoading(false);
   };
 
-  // Filter options derived from data
+  // Cascading filter options: each filter's options come from data filtered by ALL OTHER active filters
   const filterOptions = useMemo(() => {
-    const names = new Set<string>();
-    const cnpjs = new Set<string>();
-    const categories = new Set<string>();
-    const states = new Set<string>();
-    vendors.forEach(v => {
-      const name = (v.nome_fantasia || v.razao_social || "").trim();
-      if (name) names.add(name);
-      if (v.cnpj?.trim()) cnpjs.add(v.cnpj.trim());
-      if (v.category?.trim()) categories.add(v.category.trim());
-      if (v.state?.trim()) states.add(v.state.trim());
-    });
-    return {
-      name: [...names].sort(),
-      cnpj: [...cnpjs].sort(),
-      category: [...categories].sort(),
-      state: [...states].sort(),
+    const getFiltered = (excludeKey: FilterKey) => {
+      return vendors.filter(v => {
+        const name = (v.nome_fantasia || v.razao_social || "").trim();
+        if (excludeKey !== "name" && filters.name.length && !filters.name.includes(name)) return false;
+        if (excludeKey !== "cnpj" && filters.cnpj.length && !filters.cnpj.includes(v.cnpj?.trim() || "")) return false;
+        if (excludeKey !== "category" && filters.category.length && !filters.category.includes(v.category?.trim() || "")) return false;
+        if (excludeKey !== "state" && filters.state.length && !filters.state.includes(v.state?.trim() || "")) return false;
+        return true;
+      });
     };
-  }, [vendors]);
+    const extract = (list: Vendor[], key: FilterKey) => {
+      const set = new Set<string>();
+      list.forEach(v => {
+        let val = "";
+        if (key === "name") val = (v.nome_fantasia || v.razao_social || "").trim();
+        else if (key === "cnpj") val = (v.cnpj || "").trim();
+        else if (key === "category") val = (v.category || "").trim();
+        else if (key === "state") val = (v.state || "").trim();
+        if (val) set.add(val);
+      });
+      return [...set].sort();
+    };
+    return {
+      name: extract(getFiltered("name"), "name"),
+      cnpj: extract(getFiltered("cnpj"), "cnpj"),
+      category: extract(getFiltered("category"), "category"),
+      state: extract(getFiltered("state"), "state"),
+    };
+  }, [vendors, filters]);
 
   // Filtered vendors
   const filteredVendors = useMemo(() => {
