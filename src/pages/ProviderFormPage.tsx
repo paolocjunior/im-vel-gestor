@@ -224,6 +224,7 @@ export default function ProviderFormPage() {
   const deleteContract = async () => {
     if (!deleteContractId) return;
     await supabase.from("study_provider_contracts").update({ is_deleted: true }).eq("id", deleteContractId);
+    await supabase.from("study_provider_payments").update({ is_deleted: true }).eq("contract_id", deleteContractId);
     await recomputeAndSave(studyId!, user!.id);
     setDeleteContractId(null);
     toast.success("Contrato excluído.");
