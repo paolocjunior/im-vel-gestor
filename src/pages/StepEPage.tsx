@@ -164,9 +164,8 @@ export default function StepEPage() {
           </div>
 
           <div className="flex gap-3 pt-2">
-            <Button onClick={() => save(false)} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
-            <Button onClick={() => save(true)} disabled={saving} variant="outline">Salvar e voltar</Button>
-            <Button variant="ghost" onClick={() => navigate(`/studies/${id}/dashboard`)}>Cancelar</Button>
+            <Button onClick={() => save(true)} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
+            <Button variant="outline" onClick={() => navigate(`/studies/${id}/dashboard`)}>Voltar</Button>
           </div>
         </div>
       </div>

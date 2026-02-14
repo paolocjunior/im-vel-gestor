@@ -39,7 +39,7 @@ export default function GlobalTopbar({ showSettings = true }: GlobalTopbarProps)
             <Button
               variant="outline"
               size="sm"
-              className="border-sidebar-border bg-white text-foreground hover:bg-sidebar-accent text-xs"
+              className="border-sidebar-border bg-white text-foreground hover:bg-sidebar-accent dark:bg-sidebar-accent dark:text-sidebar-foreground dark:border-sidebar-border dark:hover:bg-sidebar-accent/80 text-xs"
               onClick={() => navigate("/settings")}
             >
               <Settings className="h-3.5 w-3.5 mr-1.5" />
@@ -49,7 +49,7 @@ export default function GlobalTopbar({ showSettings = true }: GlobalTopbarProps)
           <Button
             variant="outline"
             size="sm"
-            className="border-sidebar-border bg-white text-foreground hover:bg-sidebar-accent text-xs"
+            className="border-sidebar-border bg-white text-foreground hover:bg-sidebar-accent dark:bg-sidebar-accent dark:text-sidebar-foreground dark:border-sidebar-border dark:hover:bg-sidebar-accent/80 text-xs"
             onClick={handleLogout}
           >
             <LogOut className="h-3.5 w-3.5 mr-1.5" />

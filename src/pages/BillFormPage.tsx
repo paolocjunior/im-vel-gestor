@@ -818,7 +818,7 @@ export default function BillFormPage() {
             </>
           ) : (
             <>
-              <Button onClick={saveBill} disabled={saving}>{saving ? "Salvando..." : "Salvar e Voltar"}</Button>
+              <Button onClick={saveBill} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
               <Button variant="outline" onClick={() => navigate(`/studies/${studyId}/bills`)}>Voltar</Button>
             </>
           )}
@@ -902,7 +902,7 @@ export default function BillFormPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setVendorDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={saveNewVendor} disabled={savingVendor}>{savingVendor ? "Salvando..." : "Salvar e Voltar"}</Button>
+            <Button onClick={saveNewVendor} disabled={savingVendor}>{savingVendor ? "Salvando..." : "Salvar"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
