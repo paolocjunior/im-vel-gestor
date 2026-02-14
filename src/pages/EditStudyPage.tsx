@@ -93,8 +93,8 @@ export default function EditStudyPage() {
             <div className="space-y-1.5"><Label>Observações</Label><Textarea value={form.notes} onChange={e => setField("notes", e.target.value)} rows={3} /></div>
           </div>
           <div className="flex gap-3">
-            <Button onClick={() => save(true)} disabled={saving}>{saving ? "Salvando..." : "Salvar e voltar"}</Button>
-            <Button variant="outline" onClick={() => navigate(`/studies/${id}/dashboard`)}>Cancelar</Button>
+            <Button onClick={() => save(true)} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
+            <Button variant="outline" onClick={() => navigate(`/studies/${id}/dashboard`)}>Voltar</Button>
           </div>
         </div>
       </div>
