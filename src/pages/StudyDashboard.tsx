@@ -206,7 +206,7 @@ const StudyDashboard = () => {
 
             <ResultCard label="Total custos aquisição" value={fmtMoney(computed?.acquisition_total)} subtitle="Completo" colorClass="result-acquisition" />
             <ResultCard label="Total custos até venda" value={fmtMoney(computed?.holding_total)} subtitle="Completo" colorClass="result-holding" />
-            <ResultCard label="Custos desembolsados" value={fmtMoney(computed?.total_disbursed)} subtitle="Completo" colorClass="result-disbursed" />
+            <ResultCard label="Total desembolsado" value={fmtMoney(computed?.total_disbursed)} subtitle="Completo" colorClass="result-disbursed" />
             <ResultCard label="Lucro" value={fmtMoney(computed?.profit)} subtitle="Completo" colorClass="result-profit" />
             <ResultCard label="ROI" value={fmtPct(computed?.roi)} subtitle="Completo" colorClass="result-roi" />
 
