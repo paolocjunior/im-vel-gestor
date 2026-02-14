@@ -3,11 +3,12 @@ import { recomputeStudy, type StudyInputs, type LineItem, type UserThresholds } 
 
 export async function recomputeAndSave(studyId: string, userId: string) {
   // Load inputs, line items, settings, and paid provider payments in parallel
-  const [inputsRes, lineItemsRes, settingsRes, paidPaymentsRes] = await Promise.all([
+  const [inputsRes, lineItemsRes, settingsRes, paidPaymentsRes, billsPaidRes] = await Promise.all([
     supabase.from("study_inputs").select("*").eq("study_id", studyId).single(),
     supabase.from("study_line_items").select("*").eq("study_id", studyId).eq("is_deleted", false),
     supabase.from("user_settings").select("*").eq("user_id", userId).single(),
     supabase.from("study_provider_payments").select("amount").eq("study_id", studyId).eq("is_deleted", false).eq("status", "PAID"),
+    supabase.from("bill_installments").select("amount").eq("study_id", studyId).eq("status", "PAID").eq("is_deleted", false),
   ]);
 
   if (!inputsRes.data || !settingsRes.data) return;
@@ -20,8 +21,9 @@ export async function recomputeAndSave(studyId: string, userId: string) {
   };
 
   const providerTotal = (paidPaymentsRes.data || []).reduce((sum, p) => sum + Number(p.amount), 0);
+  const billsTotal = (billsPaidRes.data || []).reduce((sum, r) => sum + Number(r.amount), 0);
 
-  const result = recomputeStudy(inputs, lineItems, thresholds, providerTotal);
+  const result = recomputeStudy(inputs, lineItems, thresholds, providerTotal, 0, billsTotal);
 
   // Update computed
   await supabase.from("study_computed").update({

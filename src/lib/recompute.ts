@@ -203,6 +203,7 @@ export function recomputeStudy(
   thresholds: UserThresholds,
   providerContractsTotal: number = 0,
   constructionTotal: number = 0,
+  billsPaidTotal: number = 0,
 ): ComputedResult {
   const missing = getMissingFields(inputs);
   const pricePerM2 = calcPricePerM2(inputs);
@@ -225,7 +226,7 @@ export function recomputeStudy(
   const fixedMonthly = monthlyFinPayment.plus(condoMonthly).plus(iptuMonthly).plus(D(inputs.monthly_expenses));
   const holdingBase = fixedMonthly.times(monthsToSale);
   const holdingExtras = D(sumLineItems(lineItems, "MONTHLY_COST", monthsToSale));
-  const holdingTotal = toMoney(holdingBase.plus(holdingExtras).plus(D(providerContractsTotal)));
+  const holdingTotal = toMoney(holdingBase.plus(holdingExtras).plus(D(providerContractsTotal)).plus(D(billsPaidTotal)));
 
   // Exit total
   const brokerageVal = inputs.brokerage_mode === "PERCENT"
