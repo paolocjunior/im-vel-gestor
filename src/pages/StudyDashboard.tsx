@@ -58,9 +58,14 @@ const StudyDashboard = () => {
   const [computed, setComputed] = useState<any>(null);
   const [billsPaidTotal, setBillsPaidTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [checking, setChecking] = useState(false);
+  
 
-  useEffect(() => { if (user && id) loadAll(); }, [user, id]);
+  useEffect(() => { if (user && id) initDashboard(); }, [user, id]);
+
+  const initDashboard = async () => {
+    await recomputeAndSave(id!, user!.id);
+    await loadAll();
+  };
 
   const loadAll = async () => {
     const [studyRes, inputsRes, computedRes, billsRes] = await Promise.all([
@@ -78,13 +83,6 @@ const StudyDashboard = () => {
     setLoading(false);
   };
 
-  const checkViability = async () => {
-    setChecking(true);
-    await recomputeAndSave(id!, user!.id);
-    await loadAll();
-    setChecking(false);
-    toast.success("Viabilidade verificada!");
-  };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-background"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
 
@@ -220,9 +218,6 @@ const StudyDashboard = () => {
                   {(missingFields as string[]).join(", ")}
                 </p>
               )}
-              <Button size="sm" className="w-full mt-2" onClick={checkViability} disabled={checking}>
-                {checking ? "Verificando..." : "Verificar viabilidade"}
-              </Button>
               <div className="space-y-1 text-xs pt-2 border-t">
                 <p><span className="inline-block w-2 h-2 rounded-full bg-success mr-1.5" />Viável: ROI &gt; 30%</p>
                 <p><span className="inline-block w-2 h-2 rounded-full bg-destructive mr-1.5" />Inviável: ROI &lt; 30%</p>
