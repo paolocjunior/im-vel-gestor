@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Paperclip, Upload, X, Download } from "lucide-react";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -97,9 +99,33 @@ export default function BillFormPage() {
 
   const categoryOptions = costCenter && COST_CENTERS[costCenter] ? COST_CENTERS[costCenter] : [];
 
+  // Unsaved changes tracking
+  const [initialFormData, setInitialFormData] = useState<any>(null);
+  const currentFormData = useMemo(() => ({
+    vendorId, description, totalAmount, costCenter, category, accountId,
+    paymentMethod, installmentPlan, firstDueDate, intervalDays, notes,
+    installments: installments.map(i => ({ due_date: i.due_date, amount: i.amount, payment_method: i.payment_method, account_id: i.account_id, description: i.description })),
+  }), [vendorId, description, totalAmount, costCenter, category, accountId, paymentMethod, installmentPlan, firstDueDate, intervalDays, notes, installments]);
+
+  const { guardedNavigate, showDialog, onStay, onLeave, markSaved } = useUnsavedChanges(
+    isView ? currentFormData : initialFormData,
+    currentFormData
+  );
+
   useEffect(() => {
     if (user && studyId) { loadVendors(); loadBanks(); }
   }, [user, studyId]);
+
+  // Set initial snapshot for new bills
+  useEffect(() => {
+    if (isNew && !isClone && initialFormData === null) {
+      setInitialFormData({
+        vendorId: "", description: "", totalAmount: 0, costCenter: "", category: "",
+        accountId: "", paymentMethod: "", installmentPlan: "AVISTA",
+        firstDueDate: todayISO(), intervalDays: 30, notes: "", installments: [],
+      });
+    }
+  }, [isNew, isClone, initialFormData]);
 
   useEffect(() => {
     if (user && !isNew) loadBill();
@@ -223,6 +249,19 @@ export default function BillFormPage() {
     if (isClone) {
       setOriginalSnapshot(JSON.stringify({ vendorId: bill.vendor_id || "", description: bill.description, totalAmount: Number(bill.total_amount), costCenter: bill.cost_center || "", category: bill.category || "", accountId: bill.account_id || "", paymentMethod: bill.payment_method || "", installmentPlan: bill.installment_plan, firstDueDate: bill.first_due_date || "", intervalDays: bill.interval_days || 30, notes: bill.notes || "" }));
     }
+
+    // Set initial snapshot for edit/clone
+    const loadedInstallments = (insts || []).filter(i => bill.installment_plan !== "AVISTA").map(i => ({
+      due_date: i.due_date, amount: Number(i.amount), payment_method: i.payment_method || "",
+      account_id: i.account_id || "", description: i.description || "",
+    }));
+    setInitialFormData({
+      vendorId: bill.vendor_id || "", description: bill.description, totalAmount: Number(bill.total_amount),
+      costCenter: bill.cost_center || "", category: bill.category || "", accountId: bill.account_id || "",
+      paymentMethod: bill.payment_method || "", installmentPlan: bill.installment_plan,
+      firstDueDate: bill.first_due_date || todayISO(), intervalDays: bill.interval_days || 30,
+      notes: bill.notes || "", installments: loadedInstallments,
+    });
   };
 
   // === Installment generation ===
@@ -497,6 +536,7 @@ export default function BillFormPage() {
       }
       setSaving(false);
       toast.success("Despesa atualizada!");
+      markSaved();
       navigate(`/studies/${studyId}/bills`);
       return;
     }
@@ -541,6 +581,7 @@ export default function BillFormPage() {
       await supabase.from("bill_installments").insert(inserts);
       setSaving(false);
       toast.success("Despesa criada!");
+      markSaved();
       navigate(`/studies/${studyId}/bills`);
     }
   };
@@ -553,6 +594,7 @@ export default function BillFormPage() {
     }
     setAvistaConfirmOpen(false);
     toast.success("Despesa criada!");
+    markSaved();
     navigate(`/studies/${studyId}/bills`);
   };
 
@@ -814,12 +856,12 @@ export default function BillFormPage() {
           {isView ? (
             <>
               <Button onClick={() => navigate(`/studies/${studyId}/bills/${billId}?mode=edit`)}>Editar</Button>
-              <Button variant="outline" onClick={() => navigate(`/studies/${studyId}/bills`)}>Voltar</Button>
+              <Button variant="outline" onClick={() => guardedNavigate(`/studies/${studyId}/bills`)}>Voltar</Button>
             </>
           ) : (
             <>
               <Button onClick={saveBill} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
-              <Button variant="outline" onClick={() => navigate(`/studies/${studyId}/bills`)}>Voltar</Button>
+              <Button variant="outline" onClick={() => guardedNavigate(`/studies/${studyId}/bills`)}>Voltar</Button>
             </>
           )}
         </div>
@@ -906,6 +948,8 @@ export default function BillFormPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <UnsavedChangesDialog open={showDialog} onStay={onStay} onLeave={onLeave} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,6 +62,8 @@ export default function VendorsPage() {
   const [filters, setFilters] = useState<Record<FilterKey, string[]>>({
     name: [], cnpj: [], category: [], state: [],
   });
+  const formSnapshot = useRef<string>("");
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
 
   useEffect(() => { if (user && studyId) loadVendors(); }, [user, studyId]);
 
@@ -128,8 +131,15 @@ export default function VendorsPage() {
     });
   };
 
-  const openNew = () => { setEditId(null); setViewMode(false); setForm({ ...emptyForm }); setDialogOpen(true); };
+  const openNew = () => { setEditId(null); setViewMode(false); setForm({ ...emptyForm }); formSnapshot.current = JSON.stringify(emptyForm); setDialogOpen(true); };
 
+  const tryCloseDialog = () => {
+    if (!viewMode && JSON.stringify(form) !== formSnapshot.current) {
+      setShowUnsavedDialog(true);
+    } else {
+      setDialogOpen(false);
+    }
+  };
   const openView = async (vendorId: string) => {
     const { data } = await supabase.from("study_vendors").select("*").eq("id", vendorId).single();
     if (!data) return;
@@ -149,12 +159,14 @@ export default function VendorsPage() {
   };
 
   const populateForm = (data: any) => {
-    setForm({
+    const f = {
       cnpj: data.cnpj || "", razao_social: data.razao_social || "", nome_fantasia: data.nome_fantasia || "",
       category: data.category || "", email: data.email || "", phone: data.phone || "",
       street: data.street || "", street_number: data.street_number || "", complement: data.complement || "",
       neighborhood: data.neighborhood || "", city: data.city || "", state: data.state || "", notes: data.notes || "",
-    });
+    };
+    setForm(f);
+    formSnapshot.current = JSON.stringify(f);
   };
 
   const lookupCNPJHandler = async () => {
@@ -205,6 +217,7 @@ export default function VendorsPage() {
       await supabase.from("study_vendors").insert(payload);
     }
     setSaving(false);
+    formSnapshot.current = JSON.stringify(form);
     setDialogOpen(false);
     toast.success(editId ? "Fornecedor atualizado!" : "Fornecedor criado!");
     loadVendors();
@@ -297,7 +310,7 @@ export default function VendorsPage() {
       </div>
 
       {/* Form Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) tryCloseDialog(); }}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{viewMode ? "Visualizar Fornecedor" : editId ? "Editar Fornecedor" : "Novo Fornecedor"}</DialogTitle>
@@ -380,7 +393,7 @@ export default function VendorsPage() {
           {!viewMode && (
             <div className="flex gap-3 pt-2">
               <Button onClick={saveVendor} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
-              <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+              <Button variant="ghost" onClick={tryCloseDialog}>Cancelar</Button>
             </div>
           )}
           {viewMode && (
@@ -405,6 +418,12 @@ export default function VendorsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <UnsavedChangesDialog
+        open={showUnsavedDialog}
+        onStay={() => setShowUnsavedDialog(false)}
+        onLeave={() => { setShowUnsavedDialog(false); setDialogOpen(false); }}
+      />
     </div>
   );
 }
