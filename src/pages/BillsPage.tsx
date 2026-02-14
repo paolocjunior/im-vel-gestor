@@ -455,7 +455,7 @@ export default function BillsPage() {
       {/* Delete Dialogs */}
       {deleteInst && deleteInst.bill_installment_plan !== "AVISTA" && deleteInst.bill_installment_plan !== "1x" && deleteMode === null && (
         <AlertDialog open={deleteConfirmOpen} onOpenChange={() => { setDeleteConfirmOpen(false); setDeleteInst(null); }}>
-          <AlertDialogContent className="max-w-sm">
+          <AlertDialogContent className="max-w-md overflow-hidden">
             <AlertDialogHeader><AlertDialogTitle>Como deseja excluir?</AlertDialogTitle></AlertDialogHeader>
             <div className="space-y-2">
               <Button className="w-full" variant="outline" onClick={() => { setDeleteMode("single"); }}>Excluir apenas este vencimento</Button>
