@@ -226,7 +226,7 @@ export function recomputeStudy(
   const fixedMonthly = monthlyFinPayment.plus(condoMonthly).plus(iptuMonthly).plus(D(inputs.monthly_expenses));
   const holdingBase = fixedMonthly.times(monthsToSale);
   const holdingExtras = D(sumLineItems(lineItems, "MONTHLY_COST", monthsToSale));
-  const holdingTotal = toMoney(holdingBase.plus(holdingExtras).plus(D(providerContractsTotal)).plus(D(billsPaidTotal)));
+  const holdingTotal = toMoney(holdingBase.plus(holdingExtras).plus(D(providerContractsTotal)));
 
   // Exit total
   const brokerageVal = inputs.brokerage_mode === "PERCENT"
@@ -239,7 +239,7 @@ export function recomputeStudy(
 
   const constTotal = D(constructionTotal).plus(D(sumLineItems(lineItems, "CONSTRUCTION_COST", monthsToSale)));
 
-  const totalDisbursed = toMoney(D(acquisitionTotal).plus(D(holdingTotal)).plus(constTotal));
+  const totalDisbursed = toMoney(D(acquisitionTotal).plus(D(holdingTotal)).plus(constTotal).plus(D(billsPaidTotal)));
   const totalInvestedCapital = toMoney(D(inputs.purchase_value).plus(D(totalDisbursed)));
   const saleNet = toMoney(D(inputs.sale_value).minus(D(exitTotal)));
   const profit = toMoney(D(inputs.sale_value).minus(D(totalDisbursed)).minus(D(exitTotal)));
