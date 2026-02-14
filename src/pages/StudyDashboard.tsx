@@ -191,7 +191,9 @@ const StudyDashboard = () => {
                   fields={[
                     { label: "Valor de venda", value: fmtMoney(inputs.sale_value) },
                     { label: "Quitação na venda", value: fmtMoney(inputs.payoff_at_sale) },
-                    { label: "Corretagem", value: inputs.brokerage_mode === "PERCENT" ? `${inputs.brokerage_percent}%` : fmtMoney(inputs.brokerage_value) },
+                    { label: "Corretagem", value: inputs.brokerage_mode === "PERCENT"
+                      ? `${inputs.brokerage_percent}% (${fmtMoney(Number(inputs.sale_value || 0) * Number(inputs.brokerage_percent || 0) / 100)})`
+                      : fmtMoney(inputs.brokerage_value) },
                     { label: "Imposto de renda", value: fmtMoney(inputs.income_tax) },
                   ]}
                   onEdit={() => navigate(`/studies/${id}/steps/e`)} />
