@@ -138,7 +138,6 @@ const StudyDashboard = () => {
             {inputs && (
               <>
                 <StageEtapa title="Dados do Imóvel/Terreno" status={getStepStatus(inputs, "a")} colorClass="stage-green"
-                  studyId={id!} attachmentEntity="step_a"
                   fields={[
                     { label: "Valor de compra", value: fmtMoney(inputs.purchase_value) },
                     { label: "Área útil (m²)", value: dash(inputs.usable_area_m2) },
@@ -149,7 +148,6 @@ const StudyDashboard = () => {
                   onEdit={() => navigate(`/studies/${id}/steps/a`)} />
 
                 <StageEtapa title="Financiamento" status={getStepStatus(inputs, "b")} colorClass="stage-purple"
-                  studyId={id!} attachmentEntity="step_b"
                   fields={[
                     { label: "Usar financiamento", value: inputs.financing_enabled ? "Sim" : "Não" },
                     { label: "Sistema", value: inputs.financing_system || "—" },
@@ -161,7 +159,6 @@ const StudyDashboard = () => {
                   onEdit={() => navigate(`/studies/${id}/steps/b`)} />
 
                 <StageEtapa title="Custos de Aquisição" status={getStepStatus(inputs, "c")} colorClass="stage-yellow"
-                  studyId={id!} attachmentEntity="step_c"
                   fields={[
                     { label: "Entrada", value: fmtMoney(inputs.down_payment_acquisition) },
                     { label: "ITBI", value: fmtMoney(inputs.itbi_value) },
@@ -172,7 +169,6 @@ const StudyDashboard = () => {
                   onEdit={() => navigate(`/studies/${id}/steps/c`)} />
 
                 <StageEtapa title="Custos até a Venda" status={getStepStatus(inputs, "d")} colorClass="stage-pink"
-                  studyId={id!} attachmentEntity="step_d"
                   fields={[
                     { label: "Meses até a venda", value: dash(inputs.months_to_sale) },
                     { label: "Parcela financiamento", value: fmtMoney(inputs.monthly_financing_payment) },
@@ -184,7 +180,6 @@ const StudyDashboard = () => {
                   onEdit={() => navigate(`/studies/${id}/steps/d`)} />
 
                 <StageEtapa title="Dados da Venda" status={getStepStatus(inputs, "e")} colorClass="stage-blue"
-                  studyId={id!} attachmentEntity="step_e"
                   fields={[
                     { label: "Valor de venda", value: fmtMoney(inputs.sale_value) },
                     { label: "Quitação na venda", value: fmtMoney(inputs.payoff_at_sale) },

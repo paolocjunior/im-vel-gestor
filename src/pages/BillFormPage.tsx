@@ -85,7 +85,12 @@ export default function BillFormPage() {
 
   // New vendor dialog
   const [vendorDialogOpen, setVendorDialogOpen] = useState(false);
-  const [vendorForm, setVendorForm] = useState({ cnpj: "", razao_social: "", nome_fantasia: "", category: "", phone: "", email: "" });
+  const [vendorForm, setVendorForm] = useState({
+    cnpj: "", razao_social: "", nome_fantasia: "", category: "",
+    phone: "", email: "", street: "", street_number: "", complement: "",
+    neighborhood: "", city: "", state: "", notes: "",
+  });
+  const [lookingUpCnpj, setLookingUpCnpj] = useState(false);
   const [savingVendor, setSavingVendor] = useState(false);
 
   const effectiveBillId = (isNew || isClone) ? null : billId;
@@ -348,11 +353,35 @@ export default function BillFormPage() {
   // === Vendor Dialog ===
   const handleVendorSelect = (value: string) => {
     if (value === "__add") {
-      setVendorForm({ cnpj: "", razao_social: "", nome_fantasia: "", category: "", phone: "", email: "" });
+      setVendorForm({ cnpj: "", razao_social: "", nome_fantasia: "", category: "", phone: "", email: "", street: "", street_number: "", complement: "", neighborhood: "", city: "", state: "", notes: "" });
       setVendorDialogOpen(true);
     } else {
       setVendorId(value);
     }
+  };
+
+  const lookupCNPJInDialog = async () => {
+    const clean = vendorForm.cnpj.replace(/\D/g, "");
+    if (clean.length !== 14) { toast.error("CNPJ deve ter 14 dígitos."); return; }
+    setLookingUpCnpj(true);
+    const result = await (await import("@/lib/cnpjLookup")).lookupCNPJ(clean);
+    setLookingUpCnpj(false);
+    if (!result.ok || !result.data) { toast.error(result.error || "CNPJ não encontrado."); return; }
+    const d = result.data;
+    setVendorForm(f => ({
+      ...f,
+      razao_social: d.razao_social || f.razao_social,
+      nome_fantasia: d.nome_fantasia || f.nome_fantasia,
+      street: d.logradouro || f.street,
+      street_number: d.numero || f.street_number,
+      complement: d.complemento || f.complement,
+      neighborhood: d.bairro || f.neighborhood,
+      city: d.municipio || f.city,
+      state: d.uf || f.state,
+      phone: d.telefone ? formatPhone(d.telefone.split("/")[0].trim()) : f.phone,
+      email: d.email || f.email,
+    }));
+    toast.success("Dados preenchidos pelo CNPJ!");
   };
 
   const saveNewVendor = async () => {
@@ -367,6 +396,13 @@ export default function BillFormPage() {
       category: vendorForm.category.trim() || null,
       phone: vendorForm.phone.trim() || null,
       email: vendorForm.email.trim() || null,
+      street: vendorForm.street.trim() || null,
+      street_number: vendorForm.street_number.trim() || null,
+      complement: vendorForm.complement.trim() || null,
+      neighborhood: vendorForm.neighborhood.trim() || null,
+      city: vendorForm.city.trim() || null,
+      state: vendorForm.state.trim().toUpperCase() || null,
+      notes: vendorForm.notes.trim() || null,
     }).select("id").single();
     setSavingVendor(false);
     if (error || !data) { toast.error("Erro ao criar fornecedor."); return; }
@@ -803,32 +839,65 @@ export default function BillFormPage() {
 
       {/* New Vendor Dialog */}
       <Dialog open={vendorDialogOpen} onOpenChange={setVendorDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Novo Fornecedor</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>CNPJ</Label>
+              <Label>CNPJ *</Label>
               <Input value={vendorForm.cnpj} onChange={e => setVendorForm(f => ({ ...f, cnpj: formatCNPJ(e.target.value) }))} placeholder="xx.xxx.xxx/xxxx-xx" maxLength={18} />
             </div>
-            <div className="space-y-1.5">
-              <Label>Categoria</Label>
-              <Input value={vendorForm.category} onChange={e => setVendorForm(f => ({ ...f, category: e.target.value }))} placeholder="Ex: Material" />
+            <div className="space-y-1.5 flex flex-col justify-end">
+              <Button size="sm" variant="outline" onClick={lookupCNPJInDialog} disabled={lookingUpCnpj}>
+                {lookingUpCnpj ? "Buscando..." : "Buscar CNPJ"}
+              </Button>
             </div>
-            <div className="space-y-1.5 col-span-2">
+            <div className="space-y-1.5">
               <Label>Razão Social *</Label>
               <Input value={vendorForm.razao_social} onChange={e => setVendorForm(f => ({ ...f, razao_social: e.target.value }))} />
             </div>
-            <div className="space-y-1.5 col-span-2">
+            <div className="space-y-1.5">
               <Label>Nome Fantasia *</Label>
               <Input value={vendorForm.nome_fantasia} onChange={e => setVendorForm(f => ({ ...f, nome_fantasia: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
-              <Label>Telefone</Label>
-              <Input value={vendorForm.phone} onChange={e => setVendorForm(f => ({ ...f, phone: formatPhone(e.target.value) }))} maxLength={14} />
+              <Label>Categoria *</Label>
+              <Input value={vendorForm.category} onChange={e => setVendorForm(f => ({ ...f, category: e.target.value }))} placeholder="Ex: Material, Mão de obra" />
             </div>
             <div className="space-y-1.5">
+              <Label>Telefone *</Label>
+              <Input value={vendorForm.phone} onChange={e => setVendorForm(f => ({ ...f, phone: formatPhone(e.target.value) }))} placeholder="(xx)xxxxx-xxxx" maxLength={14} />
+            </div>
+            <div className="space-y-1.5 col-span-2">
               <Label>E-mail</Label>
-              <Input value={vendorForm.email} onChange={e => setVendorForm(f => ({ ...f, email: e.target.value }))} />
+              <Input type="email" value={vendorForm.email} onChange={e => setVendorForm(f => ({ ...f, email: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label>Logradouro *</Label>
+              <Input value={vendorForm.street} onChange={e => setVendorForm(f => ({ ...f, street: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Número *</Label>
+              <Input value={vendorForm.street_number} onChange={e => setVendorForm(f => ({ ...f, street_number: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Complemento</Label>
+              <Input value={vendorForm.complement} onChange={e => setVendorForm(f => ({ ...f, complement: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Bairro *</Label>
+              <Input value={vendorForm.neighborhood} onChange={e => setVendorForm(f => ({ ...f, neighborhood: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Cidade *</Label>
+              <Input value={vendorForm.city} onChange={e => setVendorForm(f => ({ ...f, city: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>UF *</Label>
+              <Input value={vendorForm.state} onChange={e => setVendorForm(f => ({ ...f, state: e.target.value }))} maxLength={2} />
+            </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label>Observações</Label>
+              <Textarea value={vendorForm.notes} onChange={e => setVendorForm(f => ({ ...f, notes: e.target.value }))} rows={2} />
             </div>
           </div>
           <DialogFooter>
