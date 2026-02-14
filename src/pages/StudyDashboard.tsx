@@ -56,21 +56,25 @@ const StudyDashboard = () => {
   const [study, setStudy] = useState<any>(null);
   const [inputs, setInputs] = useState<any>(null);
   const [computed, setComputed] = useState<any>(null);
+  const [billsPaidTotal, setBillsPaidTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
 
   useEffect(() => { if (user && id) loadAll(); }, [user, id]);
 
   const loadAll = async () => {
-    const [studyRes, inputsRes, computedRes] = await Promise.all([
+    const [studyRes, inputsRes, computedRes, billsRes] = await Promise.all([
       supabase.from("studies").select("*").eq("id", id).single(),
       supabase.from("study_inputs").select("*").eq("study_id", id).single(),
       supabase.from("study_computed").select("*").eq("study_id", id).single(),
+      supabase.from("bill_installments").select("amount").eq("study_id", id).eq("status", "PAID").eq("is_deleted", false),
     ]);
     if (!studyRes.data) { navigate("/hub"); return; }
     setStudy(studyRes.data);
     setInputs(inputsRes.data);
     setComputed(computedRes.data);
+    const total = (billsRes.data || []).reduce((sum, r) => sum + Number(r.amount), 0);
+    setBillsPaidTotal(total);
     setLoading(false);
   };
 
@@ -179,6 +183,7 @@ const StudyDashboard = () => {
                     { label: "IPTU", value: fmtMoney(inputs.iptu_value) },
                     { label: "Despesas mensais", value: fmtMoney(inputs.monthly_expenses) },
                     { label: "Prestador/Contratos", value: fmtMoney(computed?.provider_contracts_total) },
+                    { label: "Financeiro (pago)", value: fmtMoney(billsPaidTotal) },
                   ]}
                   onEdit={() => navigate(`/studies/${id}/steps/d`)} />
 
