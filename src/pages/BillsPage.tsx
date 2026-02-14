@@ -454,16 +454,16 @@ export default function BillsPage() {
 
       {/* Delete Dialogs */}
       {deleteInst && deleteInst.bill_installment_plan !== "AVISTA" && deleteInst.bill_installment_plan !== "1x" && deleteMode === null && (
-        <Dialog open={deleteConfirmOpen} onOpenChange={() => { setDeleteConfirmOpen(false); setDeleteInst(null); }}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader><DialogTitle>Como deseja excluir?</DialogTitle></DialogHeader>
+        <AlertDialog open={deleteConfirmOpen} onOpenChange={() => { setDeleteConfirmOpen(false); setDeleteInst(null); }}>
+          <AlertDialogContent className="max-w-sm">
+            <AlertDialogHeader><AlertDialogTitle>Como deseja excluir?</AlertDialogTitle></AlertDialogHeader>
             <div className="space-y-2">
               <Button className="w-full" variant="outline" onClick={() => { setDeleteMode("single"); }}>Excluir apenas este vencimento</Button>
               <Button className="w-full" variant="outline" onClick={() => { setDeleteMode("all_pending"); }}>Excluir todos os vencimentos pendentes desta despesa</Button>
             </div>
-            <DialogFooter><Button variant="ghost" onClick={() => { setDeleteConfirmOpen(false); setDeleteInst(null); }}>Cancelar</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
+            <AlertDialogFooter><AlertDialogCancel onClick={() => { setDeleteConfirmOpen(false); setDeleteInst(null); }}>Cancelar</AlertDialogCancel></AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
 
       <AlertDialog open={deleteConfirmOpen && deleteMode !== null} onOpenChange={() => { setDeleteConfirmOpen(false); setDeleteInst(null); setDeleteMode(null); }}>
