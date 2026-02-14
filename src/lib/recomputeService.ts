@@ -2,12 +2,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { recomputeStudy, type StudyInputs, type LineItem, type UserThresholds } from "@/lib/recompute";
 
 export async function recomputeAndSave(studyId: string, userId: string) {
-  // Load inputs, line items, settings, and provider totals in parallel
-  const [inputsRes, lineItemsRes, settingsRes, contractsRes] = await Promise.all([
+  // Load inputs, line items, settings, and paid provider payments in parallel
+  const [inputsRes, lineItemsRes, settingsRes, paidPaymentsRes] = await Promise.all([
     supabase.from("study_inputs").select("*").eq("study_id", studyId).single(),
     supabase.from("study_line_items").select("*").eq("study_id", studyId).eq("is_deleted", false),
     supabase.from("user_settings").select("*").eq("user_id", userId).single(),
-    supabase.from("study_provider_contracts").select("amount").eq("study_id", studyId).eq("is_deleted", false).eq("status", "ACTIVE"),
+    supabase.from("study_provider_payments").select("amount").eq("study_id", studyId).eq("is_deleted", false).eq("status", "PAID"),
   ]);
 
   if (!inputsRes.data || !settingsRes.data) return;
@@ -19,7 +19,7 @@ export async function recomputeAndSave(studyId: string, userId: string) {
     roi_attention_threshold: Number(settingsRes.data.roi_attention_threshold),
   };
 
-  const providerTotal = (contractsRes.data || []).reduce((sum, c) => sum + Number(c.amount), 0);
+  const providerTotal = (paidPaymentsRes.data || []).reduce((sum, p) => sum + Number(p.amount), 0);
 
   const result = recomputeStudy(inputs, lineItems, thresholds, providerTotal);
 

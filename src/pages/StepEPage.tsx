@@ -18,6 +18,7 @@ export default function StepEPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [areas, setAreas] = useState({ usable_area_m2: 0, total_area_m2: 0, land_area_m2: 0 });
   const [form, setForm] = useState({
     sale_value: 0,
     sale_price_per_m2: 0,
@@ -33,22 +34,42 @@ export default function StepEPage() {
 
   const loadData = async () => {
     const { data } = await supabase.from("study_inputs")
-      .select("sale_value, sale_price_per_m2, payoff_at_sale, brokerage_mode, brokerage_percent, brokerage_value, income_tax, sale_notes")
+      .select("sale_value, sale_price_per_m2, payoff_at_sale, brokerage_mode, brokerage_percent, brokerage_value, income_tax, sale_notes, usable_area_m2, total_area_m2, land_area_m2")
       .eq("study_id", id).single();
-    if (data) setForm({
-      sale_value: Number(data.sale_value),
-      sale_price_per_m2: Number(data.sale_price_per_m2),
-      payoff_at_sale: Number(data.payoff_at_sale),
-      brokerage_mode: data.brokerage_mode,
-      brokerage_percent: Number(data.brokerage_percent),
-      brokerage_value: Number(data.brokerage_value),
-      income_tax: Number(data.income_tax),
-      sale_notes: data.sale_notes || "",
-    });
+    if (data) {
+      const areaData = {
+        usable_area_m2: Number(data.usable_area_m2),
+        total_area_m2: Number(data.total_area_m2),
+        land_area_m2: Number(data.land_area_m2),
+      };
+      setAreas(areaData);
+      const saleVal = Number(data.sale_value);
+      const area = areaData.usable_area_m2 || areaData.total_area_m2 || areaData.land_area_m2;
+      setForm({
+        sale_value: saleVal,
+        sale_price_per_m2: area > 0 && saleVal > 0 ? Number((saleVal / area).toFixed(2)) : Number(data.sale_price_per_m2),
+        payoff_at_sale: Number(data.payoff_at_sale),
+        brokerage_mode: data.brokerage_mode,
+        brokerage_percent: Number(data.brokerage_percent),
+        brokerage_value: Number(data.brokerage_value),
+        income_tax: Number(data.income_tax),
+        sale_notes: data.sale_notes || "",
+      });
+    }
     setLoading(false);
   };
 
-  const setNum = (k: string, v: number) => setForm(f => ({ ...f, [k]: v }));
+  const setNum = (k: string, v: number) => {
+    setForm(f => {
+      const next = { ...f, [k]: v };
+      // Auto-calculate price per m² when sale_value changes
+      if (k === "sale_value") {
+        const area = areas.usable_area_m2 || areas.total_area_m2 || areas.land_area_m2;
+        next.sale_price_per_m2 = area > 0 && v > 0 ? Number((v / area).toFixed(2)) : 0;
+      }
+      return next;
+    });
+  };
 
   const brokerageCalculated = form.brokerage_mode === "PERCENT"
     ? Number(((form.sale_value * form.brokerage_percent) / 100).toFixed(2))
@@ -96,7 +117,8 @@ export default function StepEPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Preço/m² de venda (R$)</Label>
-              <MaskedNumberInput value={form.sale_price_per_m2} onValueChange={v => setNum("sale_price_per_m2", v)} />
+              <Input type="text" value={form.sale_price_per_m2.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} disabled className="bg-muted/30" />
+              <p className="text-xs text-muted-foreground">Calculado automaticamente</p>
             </div>
             <div className="space-y-1.5">
               <Label>Quitação na venda (R$)</Label>

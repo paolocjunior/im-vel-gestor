@@ -29,7 +29,6 @@ function getStepStatus(inputs: any, step: "a" | "b" | "c" | "d" | "e"): StageSta
   const updatedKey = `step_${step}_updated_at`;
   if (!inputs[updatedKey]) return "nao_iniciado";
   if (step === "b" && !inputs.financing_enabled) return "dispensado";
-  // Simple heuristic for completeness
   if (step === "a") {
     if (Number(inputs.purchase_value) > 0 && (Number(inputs.usable_area_m2) > 0 || Number(inputs.total_area_m2) > 0 || Number(inputs.land_area_m2) > 0)) return "completo";
     return "incompleto";
@@ -38,10 +37,7 @@ function getStepStatus(inputs: any, step: "a" | "b" | "c" | "d" | "e"): StageSta
     if (inputs.financing_enabled && inputs.financing_system && inputs.financing_term_months && Number(inputs.monthly_interest_rate) > 0) return "completo";
     return inputs.financing_enabled ? "incompleto" : "dispensado";
   }
-  if (step === "c") {
-    // StepC is complete once saved (all fields have valid defaults)
-    return "completo";
-  }
+  if (step === "c") return "completo";
   if (step === "d") {
     if (inputs.months_to_sale && inputs.months_to_sale >= 1) return "completo";
     return "incompleto";
@@ -142,6 +138,7 @@ const StudyDashboard = () => {
             {inputs && (
               <>
                 <StageEtapa title="Dados do Imóvel/Terreno" status={getStepStatus(inputs, "a")} colorClass="stage-green"
+                  studyId={id!} attachmentEntity="step_a"
                   fields={[
                     { label: "Valor de compra", value: fmtMoney(inputs.purchase_value) },
                     { label: "Área útil (m²)", value: dash(inputs.usable_area_m2) },
@@ -152,6 +149,7 @@ const StudyDashboard = () => {
                   onEdit={() => navigate(`/studies/${id}/steps/a`)} />
 
                 <StageEtapa title="Financiamento" status={getStepStatus(inputs, "b")} colorClass="stage-purple"
+                  studyId={id!} attachmentEntity="step_b"
                   fields={[
                     { label: "Usar financiamento", value: inputs.financing_enabled ? "Sim" : "Não" },
                     { label: "Sistema", value: inputs.financing_system || "—" },
@@ -163,6 +161,7 @@ const StudyDashboard = () => {
                   onEdit={() => navigate(`/studies/${id}/steps/b`)} />
 
                 <StageEtapa title="Custos de Aquisição" status={getStepStatus(inputs, "c")} colorClass="stage-yellow"
+                  studyId={id!} attachmentEntity="step_c"
                   fields={[
                     { label: "Entrada", value: fmtMoney(inputs.down_payment_acquisition) },
                     { label: "ITBI", value: fmtMoney(inputs.itbi_value) },
@@ -173,6 +172,7 @@ const StudyDashboard = () => {
                   onEdit={() => navigate(`/studies/${id}/steps/c`)} />
 
                 <StageEtapa title="Custos até a Venda" status={getStepStatus(inputs, "d")} colorClass="stage-pink"
+                  studyId={id!} attachmentEntity="step_d"
                   fields={[
                     { label: "Meses até a venda", value: dash(inputs.months_to_sale) },
                     { label: "Parcela financiamento", value: fmtMoney(inputs.monthly_financing_payment) },
@@ -184,6 +184,7 @@ const StudyDashboard = () => {
                   onEdit={() => navigate(`/studies/${id}/steps/d`)} />
 
                 <StageEtapa title="Dados da Venda" status={getStepStatus(inputs, "e")} colorClass="stage-blue"
+                  studyId={id!} attachmentEntity="step_e"
                   fields={[
                     { label: "Valor de venda", value: fmtMoney(inputs.sale_value) },
                     { label: "Quitação na venda", value: fmtMoney(inputs.payoff_at_sale) },

@@ -187,7 +187,6 @@ export default function VendorsPage() {
     if (!form.razao_social.trim()) errors.push("Razão Social");
     if (!form.nome_fantasia.trim()) errors.push("Nome Fantasia");
     if (!form.category.trim()) errors.push("Categoria");
-    if (!form.email.trim()) errors.push("E-mail");
     if (!form.phone.trim()) errors.push("Telefone");
     if (!form.street.trim()) errors.push("Logradouro");
     if (!form.street_number.trim()) errors.push("Número");
@@ -346,7 +345,7 @@ export default function VendorsPage() {
               />
             </div>
             <div className="space-y-1.5 col-span-2">
-              <Label>E-mail *</Label>
+              <Label>E-mail</Label>
               <Input type="email" value={form.email} onChange={e => setField("email", e.target.value)} disabled={viewMode} />
             </div>
             <div className="space-y-1.5 col-span-2">

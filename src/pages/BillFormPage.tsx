@@ -21,6 +21,7 @@ import {
   COST_CENTERS, COST_CENTER_OPTIONS, PAYMENT_METHODS,
   INSTALLMENT_OPTIONS, todayISO, addDaysISO,
 } from "@/lib/billConstants";
+import { formatCNPJ, formatPhone } from "@/lib/cnpjLookup";
 
 interface InstallmentRow {
   _key: number;
@@ -29,8 +30,7 @@ interface InstallmentRow {
   payment_method: string;
   account_id: string;
   description: string;
-  _frozen: boolean; // user manually edited amount
-  // existing DB id (for edit mode)
+  _frozen: boolean;
   _dbId?: string;
   _status?: string;
   _paid_at?: string | null;
@@ -44,7 +44,7 @@ export default function BillFormPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const mode = searchParams.get("mode") || "create"; // create | edit | view | clone
+  const mode = searchParams.get("mode") || "create";
   const isView = mode === "view";
   const isClone = mode === "clone";
   const isEdit = mode === "edit";
@@ -64,10 +64,10 @@ export default function BillFormPage() {
   const [paymentMethod, setPaymentMethod] = useState("");
   const [installmentPlan, setInstallmentPlan] = useState("AVISTA");
   const [firstDueDate, setFirstDueDate] = useState(todayISO());
-  const [intervalDays, setIntervalDays] = useState(30);
+  const [intervalDays, setIntervalDays] = useState<number | "">(30);
   const [notes, setNotes] = useState("");
 
-  // Installment rows (for 1x..60x)
+  // Installment rows
   const [installments, setInstallments] = useState<InstallmentRow[]>([]);
   const [showInstallments, setShowInstallments] = useState(false);
 
@@ -80,10 +80,14 @@ export default function BillFormPage() {
   // Anexos
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachments, setAttachments] = useState<{ id: string; file_name: string; file_path: string; file_size: number | null; }[]>([]);
-  const [pendingFiles, setPendingFiles] = useState<File[]>([]); // files queued before bill is saved
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
 
-  // Determine effective bill id for attachments (null for new/clone)
+  // New vendor dialog
+  const [vendorDialogOpen, setVendorDialogOpen] = useState(false);
+  const [vendorForm, setVendorForm] = useState({ cnpj: "", razao_social: "", nome_fantasia: "", category: "", phone: "", email: "" });
+  const [savingVendor, setSavingVendor] = useState(false);
+
   const effectiveBillId = (isNew || isClone) ? null : billId;
 
   const categoryOptions = costCenter && COST_CENTERS[costCenter] ? COST_CENTERS[costCenter] : [];
@@ -96,7 +100,6 @@ export default function BillFormPage() {
     if (user && !isNew) loadBill();
   }, [user, billId]);
 
-  // Load attachments when we have a bill id
   useEffect(() => {
     if (effectiveBillId && studyId) loadAttachments();
   }, [effectiveBillId, studyId]);
@@ -117,7 +120,6 @@ export default function BillFormPage() {
     if (!files || files.length === 0) return;
     const targetBillId = effectiveBillId;
     if (!targetBillId) {
-      // Queue files for upload after save
       setPendingFiles(prev => [...prev, ...Array.from(files)]);
       toast.success("Arquivo(s) adicionado(s). Serão enviados ao salvar.");
       return;
@@ -191,7 +193,6 @@ export default function BillFormPage() {
     setIntervalDays(bill.interval_days || 30);
     setNotes(bill.notes || "");
 
-    // Load installments
     const { data: insts } = await supabase.from("bill_installments")
       .select("*").eq("bill_id", billId).eq("is_deleted", false)
       .order("installment_number");
@@ -205,7 +206,7 @@ export default function BillFormPage() {
           payment_method: i.payment_method || "",
           account_id: i.account_id || "",
           description: i.description || "",
-          _frozen: i.status === "PAID", // paid installments are frozen
+          _frozen: i.status === "PAID",
           _dbId: i.id,
           _status: i.status,
           _paid_at: i.paid_at,
@@ -251,20 +252,53 @@ export default function BillFormPage() {
     if (plan === "AVISTA") {
       setShowInstallments(false);
       setInstallments([]);
+      return;
+    }
+
+    if (isEdit) {
+      // Keep paid installments, regenerate only pending ones
+      const paidRows = installments.filter(r => r._status === "PAID");
+      const newCount = parseInt(plan.replace("x", ""));
+      if (isNaN(newCount) || newCount < 1) return;
+      const pendingCount = Math.max(0, newCount - paidRows.length);
+      const paidSum = paidRows.reduce((s, r) => new Decimal(s).plus(r.amount).toNumber(), 0);
+      const remainingAmount = Math.max(0, new Decimal(totalAmount).minus(paidSum).toNumber());
+
+      const perPending = pendingCount > 0 ? new Decimal(remainingAmount).div(pendingCount).toDecimalPlaces(2, Decimal.ROUND_DOWN).toNumber() : 0;
+      const baseDate = firstDueDate || todayISO();
+      const interval = typeof intervalDays === "number" ? intervalDays : 30;
+      const newPendingRows: InstallmentRow[] = [];
+      for (let i = 0; i < pendingCount; i++) {
+        const dueDate = addDaysISO(baseDate, interval * (paidRows.length + i + 1));
+        const amt = i === pendingCount - 1
+          ? Number(new Decimal(remainingAmount).minus(new Decimal(perPending).times(pendingCount - 1)).toFixed(2))
+          : perPending;
+        newPendingRows.push({
+          _key: nk(),
+          due_date: dueDate,
+          amount: amt,
+          payment_method: paymentMethod,
+          account_id: accountId,
+          description: `${description} ${paidRows.length + i + 1}/${newCount}`,
+          _frozen: false,
+        });
+      }
+      setInstallments([...paidRows, ...newPendingRows]);
+      setShowInstallments(true);
     } else {
-      generateInstallments(plan, totalAmount, intervalDays, firstDueDate || todayISO(), paymentMethod, accountId, description);
+      const interval = typeof intervalDays === "number" ? intervalDays : 30;
+      generateInstallments(plan, totalAmount, interval, firstDueDate || todayISO(), paymentMethod, accountId, description);
     }
   };
 
   const handleIntervalChange = (newInterval: number) => {
     setIntervalDays(newInterval);
     if (installmentPlan !== "AVISTA" && installments.length > 0) {
-      // Recalculate all due dates based on new interval
       const baseDate = firstDueDate || todayISO();
-      setInstallments(prev => prev.map((row, i) => ({
-        ...row,
-        due_date: addDaysISO(baseDate, newInterval * (i + 1)),
-      })));
+      setInstallments(prev => prev.map((row, i) => {
+        if (row._status === "PAID") return row; // Don't change paid installment dates
+        return { ...row, due_date: addDaysISO(baseDate, newInterval * (i + 1)) };
+      }));
     }
   };
 
@@ -277,8 +311,8 @@ export default function BillFormPage() {
 
   // Residual method redistribution
   const redistributeAmounts = (rows: InstallmentRow[], total: number) => {
-    const frozenSum = rows.filter(r => r._frozen).reduce((s, r) => new Decimal(s).plus(r.amount).toNumber(), 0);
-    const unfrozenCount = rows.filter(r => !r._frozen).length;
+    const frozenSum = rows.filter(r => r._frozen || r._status === "PAID").reduce((s, r) => new Decimal(s).plus(r.amount).toNumber(), 0);
+    const unfrozenCount = rows.filter(r => !r._frozen && r._status !== "PAID").length;
     if (unfrozenCount === 0) return;
     const remaining = new Decimal(total).minus(frozenSum);
     const perUnfrozen = remaining.div(unfrozenCount).toDecimalPlaces(2, Decimal.ROUND_DOWN).toNumber();
@@ -286,7 +320,7 @@ export default function BillFormPage() {
     let distributed = new Decimal(0);
     let lastUnfrozenIdx = -1;
     const updated = rows.map((row, i) => {
-      if (row._frozen) {
+      if (row._frozen || row._status === "PAID") {
         distributed = distributed.plus(row.amount);
         return row;
       }
@@ -295,7 +329,6 @@ export default function BillFormPage() {
       return { ...row, amount: perUnfrozen };
     });
 
-    // Adjust last unfrozen for rounding
     if (lastUnfrozenIdx >= 0) {
       const diff = new Decimal(total).minus(distributed).toNumber();
       updated[lastUnfrozenIdx] = { ...updated[lastUnfrozenIdx], amount: Number(new Decimal(updated[lastUnfrozenIdx].amount).plus(diff).toFixed(2)) };
@@ -312,12 +345,43 @@ export default function BillFormPage() {
     setInstallments(prev => prev.map(r => r._key === key ? { ...r, [field]: value } : r));
   };
 
+  // === Vendor Dialog ===
+  const handleVendorSelect = (value: string) => {
+    if (value === "__add") {
+      setVendorForm({ cnpj: "", razao_social: "", nome_fantasia: "", category: "", phone: "", email: "" });
+      setVendorDialogOpen(true);
+    } else {
+      setVendorId(value);
+    }
+  };
+
+  const saveNewVendor = async () => {
+    if (!vendorForm.razao_social.trim()) { toast.error("Razão Social é obrigatória."); return; }
+    if (!vendorForm.nome_fantasia.trim()) { toast.error("Nome Fantasia é obrigatório."); return; }
+    setSavingVendor(true);
+    const { data, error } = await supabase.from("study_vendors").insert({
+      study_id: studyId!,
+      cnpj: vendorForm.cnpj.trim() || null,
+      razao_social: vendorForm.razao_social.trim(),
+      nome_fantasia: vendorForm.nome_fantasia.trim(),
+      category: vendorForm.category.trim() || null,
+      phone: vendorForm.phone.trim() || null,
+      email: vendorForm.email.trim() || null,
+    }).select("id").single();
+    setSavingVendor(false);
+    if (error || !data) { toast.error("Erro ao criar fornecedor."); return; }
+    toast.success("Fornecedor criado!");
+    setVendorDialogOpen(false);
+    await loadVendors();
+    setVendorId(data.id);
+  };
+
   // === Save ===
   const saveBill = async () => {
     if (!description.trim()) { toast.error("Descrição é obrigatória."); return; }
     if (totalAmount <= 0) { toast.error("Valor total deve ser maior que zero."); return; }
 
-    // Validate installment sum
+    // Validate installment sum (only count non-paid for edit mode)
     if (showInstallments && installments.length > 0) {
       const sum = installments.reduce((s, r) => new Decimal(s).plus(r.amount).toNumber(), 0);
       const diff = Math.abs(new Decimal(totalAmount).minus(sum).toNumber());
@@ -338,6 +402,8 @@ export default function BillFormPage() {
 
     setSaving(true);
 
+    const effectiveInterval = typeof intervalDays === "number" ? intervalDays : 30;
+
     const billPayload = {
       study_id: studyId!,
       vendor_id: vendorId || null,
@@ -349,31 +415,40 @@ export default function BillFormPage() {
       payment_method: paymentMethod || null,
       installment_plan: installmentPlan,
       first_due_date: installmentPlan === "AVISTA" ? firstDueDate : null,
-      interval_days: intervalDays,
+      interval_days: effectiveInterval,
       notes: notes || null,
     };
 
     if (isEdit && billId) {
       // Update bill
       await supabase.from("bills").update(billPayload).eq("id", billId);
-      // Update pending installments
+
       if (showInstallments) {
-        for (const row of installments) {
-          // Only update pending installments
-          if (row._status === "PAID") continue;
-          const instPayload = {
+        // Delete all old pending installments from DB
+        await supabase.from("bill_installments")
+          .update({ is_deleted: true })
+          .eq("bill_id", billId)
+          .eq("status", "PENDING");
+
+        // Insert new pending installments
+        const pendingRows = installments.filter(r => r._status !== "PAID");
+        const paidCount = installments.filter(r => r._status === "PAID").length;
+        if (pendingRows.length > 0) {
+          const inserts = pendingRows.map((row, i) => ({
+            bill_id: billId,
+            study_id: studyId!,
+            installment_number: paidCount + i + 1,
             due_date: row.due_date,
             amount: row.amount,
+            description: row.description || null,
             payment_method: row.payment_method || null,
             account_id: row.account_id || null,
-            description: row.description || null,
-          };
-          if (row._dbId) {
-            await supabase.from("bill_installments").update(instPayload).eq("id", row._dbId);
-          }
+            status: "PENDING",
+          }));
+          await supabase.from("bill_installments").insert(inserts);
         }
       } else if (installmentPlan === "AVISTA") {
-        // Update the single installment
+        // Update the single pending installment
         const { data: existingInsts } = await supabase.from("bill_installments")
           .select("id").eq("bill_id", billId).eq("is_deleted", false).eq("status", "PENDING");
         if (existingInsts && existingInsts.length > 0) {
@@ -401,7 +476,6 @@ export default function BillFormPage() {
     }
 
     if (installmentPlan === "AVISTA") {
-      // Single installment
       await supabase.from("bill_installments").insert({
         bill_id: newBill.id,
         study_id: studyId!,
@@ -417,7 +491,6 @@ export default function BillFormPage() {
       setAvistaConfirmOpen(true);
       (window as any).__lastBillId = newBill.id;
     } else {
-      // Multiple installments
       const inserts = installments.map((row, i) => ({
         bill_id: newBill.id,
         study_id: studyId!,
@@ -461,14 +534,13 @@ export default function BillFormPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <Label>Fornecedor:</Label>
-              <Select value={vendorId} onValueChange={setVendorId} disabled={isView}>
+              <Select value={vendorId} onValueChange={handleVendorSelect} disabled={isView}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   {vendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
                   <SelectItem value="__add">+ Adicionar Fornecedor</SelectItem>
                 </SelectContent>
               </Select>
-              {vendorId === "__add" && (() => { navigate(`/studies/${studyId}/vendors`); return null; })()}
             </div>
             <div className="space-y-1.5">
               <Label>Descrição:</Label>
@@ -541,7 +613,28 @@ export default function BillFormPage() {
             {installmentPlan !== "AVISTA" && (
               <div className="space-y-1.5">
                 <Label>Intervalo (dias):</Label>
-                <Input type="number" min={1} value={intervalDays} onChange={e => handleIntervalChange(Number(e.target.value) || 1)} disabled={isView} />
+                <Input
+                  type="number"
+                  min={1}
+                  value={intervalDays === "" ? "" : intervalDays}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === "") {
+                      setIntervalDays("");
+                    } else {
+                      const num = Number(val);
+                      setIntervalDays(num);
+                      if (num > 0) handleIntervalChange(num);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (intervalDays === "" || intervalDays === 0) {
+                      setIntervalDays(30);
+                      handleIntervalChange(30);
+                    }
+                  }}
+                  disabled={isView}
+                />
               </div>
             )}
           </div>
@@ -640,7 +733,6 @@ export default function BillFormPage() {
               </Button>
             </div>
           )}
-          {/* Pending files (not yet uploaded) */}
           {pendingFiles.length > 0 && (
             <div className="space-y-1">
               {pendingFiles.map((f, i) => (
@@ -657,7 +749,6 @@ export default function BillFormPage() {
               ))}
             </div>
           )}
-          {/* Uploaded attachments */}
           {attachments.length > 0 && (
             <div className="space-y-1">
               {attachments.map(doc => (
@@ -706,6 +797,43 @@ export default function BillFormPage() {
           <DialogFooter className="flex gap-2">
             <Button variant="outline" onClick={() => handleAvistaConfirm(false)}>Não</Button>
             <Button onClick={() => handleAvistaConfirm(true)}>Sim</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Vendor Dialog */}
+      <Dialog open={vendorDialogOpen} onOpenChange={setVendorDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Novo Fornecedor</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>CNPJ</Label>
+              <Input value={vendorForm.cnpj} onChange={e => setVendorForm(f => ({ ...f, cnpj: formatCNPJ(e.target.value) }))} placeholder="xx.xxx.xxx/xxxx-xx" maxLength={18} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Categoria</Label>
+              <Input value={vendorForm.category} onChange={e => setVendorForm(f => ({ ...f, category: e.target.value }))} placeholder="Ex: Material" />
+            </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label>Razão Social *</Label>
+              <Input value={vendorForm.razao_social} onChange={e => setVendorForm(f => ({ ...f, razao_social: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label>Nome Fantasia *</Label>
+              <Input value={vendorForm.nome_fantasia} onChange={e => setVendorForm(f => ({ ...f, nome_fantasia: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Telefone</Label>
+              <Input value={vendorForm.phone} onChange={e => setVendorForm(f => ({ ...f, phone: formatPhone(e.target.value) }))} maxLength={14} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>E-mail</Label>
+              <Input value={vendorForm.email} onChange={e => setVendorForm(f => ({ ...f, email: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVendorDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={saveNewVendor} disabled={savingVendor}>{savingVendor ? "Salvando..." : "Salvar e Voltar"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
