@@ -460,8 +460,8 @@ export default function BillsPage() {
             <div className="space-y-2">
               <Button className="w-full" variant="outline" onClick={() => { setDeleteMode("single"); }}>Excluir apenas este vencimento</Button>
               <Button className="w-full" variant="outline" onClick={() => { setDeleteMode("all_pending"); }}>Excluir todos os vencimentos pendentes desta despesa</Button>
+              <Button className="w-full" variant="ghost" onClick={() => { setDeleteConfirmOpen(false); setDeleteInst(null); }}>Cancelar</Button>
             </div>
-            <AlertDialogFooter><AlertDialogCancel onClick={() => { setDeleteConfirmOpen(false); setDeleteInst(null); }}>Cancelar</AlertDialogCancel></AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       )}
