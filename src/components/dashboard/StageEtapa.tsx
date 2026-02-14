@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import AttachmentSection from "@/components/AttachmentSection";
 
 type StageStatus = "nao_iniciado" | "incompleto" | "completo" | "dispensado";
 
@@ -20,9 +21,11 @@ interface StageEtapaProps {
   colorClass: string;
   fields: FieldPair[];
   onEdit?: () => void;
+  studyId?: string;
+  attachmentEntity?: string;
 }
 
-const StageEtapa = ({ title, status, colorClass, fields, onEdit }: StageEtapaProps) => {
+const StageEtapa = ({ title, status, colorClass, fields, onEdit, studyId, attachmentEntity }: StageEtapaProps) => {
   const cfg = statusConfig[status];
 
   return (
@@ -44,6 +47,11 @@ const StageEtapa = ({ title, status, colorClass, fields, onEdit }: StageEtapaPro
           </div>
         ))}
       </div>
+
+      {/* Attachments */}
+      {studyId && attachmentEntity && (
+        <AttachmentSection studyId={studyId} entity={attachmentEntity} compact />
+      )}
 
       {/* Editar */}
       {onEdit && (

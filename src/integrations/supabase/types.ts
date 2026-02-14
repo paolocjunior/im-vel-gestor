@@ -1000,6 +1000,71 @@ export type Database = {
           },
         ]
       }
+      user_categories: {
+        Row: {
+          cost_center_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cost_center_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cost_center_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_categories_cost_center_id_fkey"
+            columns: ["cost_center_id"]
+            isOneToOne: false
+            referencedRelation: "user_cost_centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_cost_centers: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_settings: {
         Row: {
           created_at: string
