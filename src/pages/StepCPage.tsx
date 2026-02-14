@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { recomputeAndSave } from "@/lib/recomputeService";
 import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 import AttachmentSection from "@/components/AttachmentSection";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 
 export default function StepCPage() {
   const { id } = useParams();
@@ -32,6 +34,8 @@ export default function StepCPage() {
   });
   const [purchaseValue, setPurchaseValue] = useState(0);
 
+  const [initialForm, setInitialForm] = useState<typeof form | null>(null);
+
   useEffect(() => { if (user && id) loadData(); }, [user, id]);
 
   const loadData = async () => {
@@ -44,7 +48,7 @@ export default function StepCPage() {
       setFinancingEnabled(finEnabled);
       setFinancingDownPayment(finDown);
       setPurchaseValue(Number(data.purchase_value));
-      setForm({
+      const loaded = {
         down_payment_acquisition: finEnabled && finDown > 0 ? finDown : Number(data.down_payment_acquisition),
         itbi_mode: data.itbi_mode,
         itbi_percent: Number(data.itbi_percent),
@@ -52,10 +56,14 @@ export default function StepCPage() {
         bank_appraisal: Number(data.bank_appraisal),
         registration_fee: Number(data.registration_fee),
         deed_fee: Number(data.deed_fee),
-      });
+      };
+      setForm(loaded);
+      setInitialForm(loaded);
     }
     setLoading(false);
   };
+
+  const { isDirty, blocker, markSaved } = useUnsavedChanges(initialForm, form);
 
   const setNum = (k: string, v: number) => setForm(f => ({ ...f, [k]: v }));
 
@@ -87,6 +95,7 @@ export default function StepCPage() {
     if (error) { toast.error("Erro ao salvar."); setSaving(false); return; }
     await recomputeAndSave(id!, user!.id);
     setSaving(false);
+    markSaved();
     toast.success("Custos de aquisição salvos!");
     if (goBack) navigate(`/studies/${id}/dashboard`);
   };
@@ -174,6 +183,7 @@ export default function StepCPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <UnsavedChangesDialog blocker={blocker} />
     </div>
   );
 }

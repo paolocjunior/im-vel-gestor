@@ -170,8 +170,11 @@ const StudyDashboard = () => {
 
                 <StageEtapa title="Custos até a Venda" status={getStepStatus(inputs, "d")} colorClass="stage-pink"
                   fields={[
-                    { label: "Meses até a venda", value: dash(inputs.months_to_sale) },
-                    { label: "Parcela financiamento", value: fmtMoney(inputs.monthly_financing_payment) },
+                    { label: "Financiamento", value: inputs.months_to_sale && inputs.months_to_sale >= 1 && Number(inputs.monthly_financing_payment) > 0
+                      ? `${inputs.months_to_sale}x ${fmtMoney(inputs.monthly_financing_payment)}`
+                      : inputs.months_to_sale && inputs.months_to_sale >= 1
+                        ? `${inputs.months_to_sale} meses`
+                        : "—" },
                     { label: "Condomínio", value: fmtMoney(inputs.condo_fee) },
                     { label: "IPTU", value: fmtMoney(inputs.iptu_value) },
                     { label: "Despesas mensais", value: fmtMoney(inputs.monthly_expenses) },

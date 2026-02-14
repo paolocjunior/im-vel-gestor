@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ import { recomputeAndSave } from "@/lib/recomputeService";
 import { formatBRL } from "@/lib/recompute";
 import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 import AttachmentSection from "@/components/AttachmentSection";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 
 export default function StepBPage() {
   const { id } = useParams();
@@ -29,6 +31,8 @@ export default function StepBPage() {
   });
   const [computed, setComputed] = useState<any>(null);
 
+  const [initialForm, setInitialForm] = useState<typeof form | null>(null);
+
   useEffect(() => { if (user && id) loadData(); }, [user, id]);
 
   const loadData = async () => {
@@ -38,17 +42,21 @@ export default function StepBPage() {
     ]);
     if (inputsRes.data) {
       const d = inputsRes.data;
-      setForm({
+      const loaded = {
         financing_enabled: d.financing_enabled,
         financing_system: d.financing_system || "",
         down_payment_value: Number(d.down_payment_value),
         financing_term_months: d.financing_term_months || 0,
         monthly_interest_rate: Number(d.monthly_interest_rate),
-      });
+      };
+      setForm(loaded);
+      setInitialForm(loaded);
     }
     if (computedRes.data) setComputed(computedRes.data);
     setLoading(false);
   };
+
+  const { isDirty, blocker, markSaved } = useUnsavedChanges(initialForm, form);
 
   const setNum = (k: string, v: number) => setForm(f => ({ ...f, [k]: v }));
 
@@ -92,6 +100,7 @@ export default function StepBPage() {
     const { data: newComputed } = await supabase.from("study_computed").select("financed_amount, first_installment, last_installment, total_paid_financing, total_interest").eq("study_id", id).single();
     if (newComputed) setComputed(newComputed);
     setSaving(false);
+    markSaved();
     toast.success("Financiamento salvo!");
     if (goBack) navigate(`/studies/${id}/dashboard`);
   };
@@ -167,6 +176,7 @@ export default function StepBPage() {
           </div>
         </div>
       </div>
+      <UnsavedChangesDialog blocker={blocker} />
     </div>
   );
 }

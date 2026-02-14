@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { recomputeAndSave } from "@/lib/recomputeService";
 import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 import AttachmentSection from "@/components/AttachmentSection";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 
 export default function StepAPage() {
   const { id } = useParams();
@@ -26,20 +28,28 @@ export default function StepAPage() {
     price_per_m2_manual: false,
   });
 
+  const [initialForm, setInitialForm] = useState<typeof form | null>(null);
+
   useEffect(() => { if (user && id) loadData(); }, [user, id]);
 
   const loadData = async () => {
     const { data } = await supabase.from("study_inputs").select("purchase_value, usable_area_m2, total_area_m2, land_area_m2, purchase_price_per_m2, price_per_m2_manual").eq("study_id", id).single();
-    if (data) setForm({
-      purchase_value: Number(data.purchase_value),
-      usable_area_m2: Number(data.usable_area_m2),
-      total_area_m2: Number(data.total_area_m2),
-      land_area_m2: Number(data.land_area_m2),
-      purchase_price_per_m2: Number(data.purchase_price_per_m2),
-      price_per_m2_manual: data.price_per_m2_manual,
-    });
+    if (data) {
+      const loaded = {
+        purchase_value: Number(data.purchase_value),
+        usable_area_m2: Number(data.usable_area_m2),
+        total_area_m2: Number(data.total_area_m2),
+        land_area_m2: Number(data.land_area_m2),
+        purchase_price_per_m2: Number(data.purchase_price_per_m2),
+        price_per_m2_manual: data.price_per_m2_manual,
+      };
+      setForm(loaded);
+      setInitialForm(loaded);
+    }
     setLoading(false);
   };
+
+  const { isDirty, blocker, markSaved } = useUnsavedChanges(initialForm, form);
 
   const setNum = (k: string, v: number) => setForm(f => {
     const next = { ...f, [k]: v };
@@ -78,6 +88,7 @@ export default function StepAPage() {
     if (error) { toast.error("Erro ao salvar."); setSaving(false); return; }
     await recomputeAndSave(id!, user!.id);
     setSaving(false);
+    markSaved();
     toast.success("Dados do imóvel salvos!");
     if (goBack) navigate(`/studies/${id}/dashboard`);
   };
@@ -128,6 +139,7 @@ export default function StepAPage() {
           </div>
         </div>
       </div>
+      <UnsavedChangesDialog blocker={blocker} />
     </div>
   );
 }
