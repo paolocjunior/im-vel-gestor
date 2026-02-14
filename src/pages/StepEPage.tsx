@@ -13,6 +13,7 @@ import { recomputeAndSave } from "@/lib/recomputeService";
 import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 import AttachmentSection from "@/components/AttachmentSection";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 
 export default function StepEPage() {
   const { id } = useParams();
@@ -65,7 +66,7 @@ export default function StepEPage() {
     setLoading(false);
   };
 
-  const { isDirty, markSaved, guardedNavigate } = useUnsavedChanges(initialForm, form);
+  const { isDirty, markSaved, guardedNavigate, showDialog, onStay, onLeave } = useUnsavedChanges(initialForm, form);
 
   const setNum = (k: string, v: number) => {
     setForm(f => {
@@ -177,6 +178,7 @@ export default function StepEPage() {
           </div>
         </div>
       </div>
+      <UnsavedChangesDialog open={showDialog} onStay={onStay} onLeave={onLeave} />
     </div>
   );
 }

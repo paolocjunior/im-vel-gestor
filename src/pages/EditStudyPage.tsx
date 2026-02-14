@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { lookupCEP } from "@/lib/cepLookup";
 import { recomputeAndSave } from "@/lib/recomputeService";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 
 export default function EditStudyPage() {
   const { id } = useParams();
@@ -45,7 +46,7 @@ export default function EditStudyPage() {
     setLoading(false);
   };
 
-  const { isDirty, markSaved, guardedNavigate } = useUnsavedChanges(initialForm, form);
+  const { isDirty, markSaved, guardedNavigate, showDialog, onStay, onLeave } = useUnsavedChanges(initialForm, form);
 
   const handleCEP = async () => {
     setCepLoading(true);
@@ -106,6 +107,7 @@ export default function EditStudyPage() {
           </div>
         </div>
       </div>
+      <UnsavedChangesDialog open={showDialog} onStay={onStay} onLeave={onLeave} />
     </div>
   );
 }

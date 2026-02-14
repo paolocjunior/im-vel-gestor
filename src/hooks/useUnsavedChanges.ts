@@ -3,12 +3,15 @@ import { useNavigate } from "react-router-dom";
 
 /**
  * Tracks whether a form has unsaved changes and warns before navigating away.
- * Uses window.confirm + beforeunload instead of useBlocker (which requires a data router).
+ * Returns a dialog state so the caller can render <UnsavedChangesDialog />.
  */
 export function useUnsavedChanges(initialData: any, currentData: any) {
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
   const initialized = useRef(false);
   const navigate = useNavigate();
+
+  const [showDialog, setShowDialog] = useState(false);
+  const pendingPath = useRef<string | null>(null);
 
   useEffect(() => {
     if (initialData !== null && initialData !== undefined && !initialized.current) {
@@ -34,14 +37,27 @@ export function useUnsavedChanges(initialData: any, currentData: any) {
     setSavedSnapshot(JSON.stringify(currentData));
   }, [currentData]);
 
-  /** Wrap your "Voltar" navigation with this to get a confirm prompt when dirty */
+  /** Wrap your "Voltar" navigation with this to get a confirm dialog when dirty */
   const guardedNavigate = useCallback((to: string) => {
     if (isDirty) {
-      const leave = window.confirm("Você tem alterações não salvas. Deseja sair sem salvar?");
-      if (!leave) return;
+      pendingPath.current = to;
+      setShowDialog(true);
+    } else {
+      navigate(to);
     }
-    navigate(to);
   }, [isDirty, navigate]);
 
-  return { isDirty, markSaved, guardedNavigate };
+  const onStay = useCallback(() => {
+    setShowDialog(false);
+    pendingPath.current = null;
+  }, []);
+
+  const onLeave = useCallback(() => {
+    setShowDialog(false);
+    if (pendingPath.current) {
+      navigate(pendingPath.current);
+    }
+  }, [navigate]);
+
+  return { isDirty, markSaved, guardedNavigate, showDialog, onStay, onLeave };
 }
