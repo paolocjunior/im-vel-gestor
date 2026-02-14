@@ -1,5 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -85,12 +87,31 @@ export default function ProviderFormPage() {
   // Financial institutions for bank dropdown
   const [banks, setBanks] = useState<{ id: string; name: string }[]>([]);
 
+  // Unsaved changes tracking
+  const [initialFormData, setInitialFormData] = useState<any>(null);
+  const currentFormData = useMemo(() => ({
+    ...form,
+    payments: payments.filter(p => !p._deleted).map(p => ({
+      payment_date: p.payment_date, contract_id: p.contract_id, amount: p.amount,
+      payment_method: p.payment_method, status: p.status,
+    })),
+  }), [form, payments]);
+
+  const { guardedNavigate, showDialog, onStay, onLeave, markSaved } = useUnsavedChanges(initialFormData, currentFormData);
+
   useEffect(() => {
     if (user && studyId) {
       loadBanks();
       if (!isNew) loadProvider();
     }
   }, [user, studyId, providerId]);
+
+  // Set initial snapshot for new providers
+  useEffect(() => {
+    if (isNew && initialFormData === null) {
+      setInitialFormData({ ...emptyProvider, payments: [] });
+    }
+  }, [isNew, initialFormData]);
 
   const loadBanks = async () => {
     const { data } = await supabase.from("financial_institutions")
@@ -101,7 +122,7 @@ export default function ProviderFormPage() {
   const loadProvider = async () => {
     const { data } = await supabase.from("study_providers").select("*").eq("id", providerId).single();
     if (!data) return;
-    setForm({
+    const loadedForm = {
       full_name: data.full_name, person_type: data.person_type, cpf_cnpj: data.cpf_cnpj || "",
       phone: data.phone || "", email: data.email || "",
       cep: data.cep || "", street: data.street || "", street_number: data.street_number || "",
@@ -110,7 +131,20 @@ export default function ProviderFormPage() {
       bank_name: data.bank_name || "", bank_agency: data.bank_agency || "",
       bank_account: data.bank_account || "", bank_account_type: data.bank_account_type || "",
       bank_pix: data.bank_pix || "", bank_holder_name: data.bank_holder_name || "",
-    });
+    };
+    setForm(loadedForm);
+
+    // Load payments for snapshot
+    const { data: paymentsData } = await supabase.from("study_provider_payments")
+      .select("id, payment_date, contract_id, amount, payment_method, status")
+      .eq("provider_id", providerId).eq("study_id", studyId).eq("is_deleted", false)
+      .order("payment_date", { ascending: true });
+    const loadedPayments = (paymentsData || []).map(p => ({
+      payment_date: p.payment_date, contract_id: p.contract_id || "",
+      amount: Number(p.amount), payment_method: p.payment_method || "", status: p.status,
+    }));
+    setInitialFormData({ ...loadedForm, payments: loadedPayments });
+
     loadContracts();
     loadPayments();
   };
@@ -195,6 +229,7 @@ export default function ProviderFormPage() {
     }
     setSaving(false);
     toast.success("Dados pessoais salvos!");
+    markSaved();
   };
 
   // === Contracts ===
@@ -316,10 +351,11 @@ export default function ProviderFormPage() {
     }
     setPaymentSaving(false);
     toast.success("Pagamentos salvos!");
+    markSaved();
     loadPayments();
   };
 
-  const goBack = () => navigate(`/studies/${studyId}/providers`);
+  const goBack = () => guardedNavigate(`/studies/${studyId}/providers`);
   const tabsDisabled = !savedProviderId;
 
   return (
@@ -677,6 +713,8 @@ export default function ProviderFormPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <UnsavedChangesDialog open={showDialog} onStay={onStay} onLeave={onLeave} />
     </div>
   );
 }
