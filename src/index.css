@@ -143,6 +143,33 @@
   .result-roi { background: #f2dccb; }
   .result-indicator { background: #e6eef0; }
 
+  /* Dark mode overrides for stage and result cards */
+  .dark .stage-green { background: hsl(165, 30%, 18%); color: hsl(165, 40%, 80%); }
+  .dark .stage-purple { background: hsl(215, 30%, 18%); color: hsl(215, 40%, 80%); }
+  .dark .stage-yellow { background: hsl(260, 25%, 20%); color: hsl(260, 35%, 82%); }
+  .dark .stage-pink { background: hsl(95, 25%, 18%); color: hsl(95, 35%, 80%); }
+  .dark .stage-blue { background: hsl(25, 30%, 18%); color: hsl(25, 40%, 82%); }
+
+  .dark .result-acquisition { background: hsl(175, 25%, 16%); color: hsl(175, 35%, 82%); }
+  .dark .result-holding { background: hsl(215, 25%, 16%); color: hsl(215, 35%, 82%); }
+  .dark .result-disbursed { background: hsl(260, 20%, 18%); color: hsl(260, 30%, 84%); }
+  .dark .result-profit { background: hsl(95, 20%, 16%); color: hsl(95, 30%, 82%); }
+  .dark .result-roi { background: hsl(25, 25%, 16%); color: hsl(25, 35%, 82%); }
+  .dark .result-indicator { background: hsl(195, 20%, 16%); color: hsl(195, 30%, 82%); }
+
+  .dark .stage-green .text-muted-foreground,
+  .dark .stage-purple .text-muted-foreground,
+  .dark .stage-yellow .text-muted-foreground,
+  .dark .stage-pink .text-muted-foreground,
+  .dark .stage-blue .text-muted-foreground { color: inherit; opacity: 0.7; }
+
+  .dark .result-acquisition .text-muted-foreground,
+  .dark .result-holding .text-muted-foreground,
+  .dark .result-disbursed .text-muted-foreground,
+  .dark .result-profit .text-muted-foreground,
+  .dark .result-roi .text-muted-foreground,
+  .dark .result-indicator .text-muted-foreground { color: inherit; opacity: 0.7; }
+
   .kpi-value {
     font-family: 'Manrope', sans-serif;
     font-weight: 700;

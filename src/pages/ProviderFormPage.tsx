@@ -481,6 +481,14 @@ export default function ProviderFormPage() {
                   <Textarea value={contractForm.details} onChange={e => setContractForm(f => ({ ...f, details: e.target.value }))} rows={4} />
                 </div>
               </div>
+
+              {/* Anexos do contrato */}
+              {editingContractId && savedProviderId && (
+                <div className="space-y-2 pt-2 border-t">
+                  <Label className="text-sm font-semibold">Anexos do Contrato</Label>
+                  <AttachmentSection studyId={studyId!} entity="contract" entityId={editingContractId} />
+                </div>
+              )}
             </fieldset>
 
             <div className="flex gap-3">
@@ -628,6 +636,14 @@ export default function ProviderFormPage() {
               <Button variant="outline" size="sm" onClick={addPaymentRow}>
                 <Plus className="h-4 w-4 mr-1" /> Adicionar Pagamento
               </Button>
+
+              {/* Anexos dos pagamentos */}
+              {savedProviderId && (
+                <div className="space-y-2 pt-2 border-t">
+                  <Label className="text-sm font-semibold">Anexos de Pagamentos</Label>
+                  <AttachmentSection studyId={studyId!} entity="provider_payments" entityId={savedProviderId} />
+                </div>
+              )}
             </fieldset>
 
             <div className="flex gap-3">

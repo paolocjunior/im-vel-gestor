@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { recomputeAndSave } from "@/lib/recomputeService";
 import { MaskedNumberInput } from "@/components/ui/masked-number-input";
+import AttachmentSection from "@/components/AttachmentSection";
 
 export default function StepCPage() {
   const { id } = useParams();
@@ -141,6 +142,12 @@ export default function StepCPage() {
               <MaskedNumberInput value={form.deed_fee} onValueChange={v => setNum("deed_fee", v)} />
             </div>
           </div>
+          {/* Anexos */}
+          <div className="space-y-2 pt-2 border-t">
+            <Label className="text-sm font-semibold">Anexos</Label>
+            <AttachmentSection studyId={id!} entity="step_c" />
+          </div>
+
           <div className="flex gap-3 pt-2">
             <Button onClick={() => save(false)} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
             <Button onClick={() => save(true)} disabled={saving} variant="outline">Salvar e voltar</Button>
