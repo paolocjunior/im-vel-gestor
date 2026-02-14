@@ -12,7 +12,6 @@ import { recomputeAndSave } from "@/lib/recomputeService";
 import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 import AttachmentSection from "@/components/AttachmentSection";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
-import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 
 export default function StepCPage() {
   const { id } = useParams();
@@ -63,7 +62,7 @@ export default function StepCPage() {
     setLoading(false);
   };
 
-  const { isDirty, blocker, markSaved } = useUnsavedChanges(initialForm, form);
+  const { isDirty, markSaved, guardedNavigate } = useUnsavedChanges(initialForm, form);
 
   const setNum = (k: string, v: number) => setForm(f => ({ ...f, [k]: v }));
 
@@ -159,7 +158,7 @@ export default function StepCPage() {
 
           <div className="flex gap-3 pt-2">
             <Button onClick={() => save(true)} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
-            <Button variant="outline" onClick={() => navigate(`/studies/${id}/dashboard`)}>Voltar</Button>
+            <Button variant="outline" onClick={() => guardedNavigate(`/studies/${id}/dashboard`)}>Voltar</Button>
           </div>
         </div>
       </div>
@@ -183,7 +182,6 @@ export default function StepCPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <UnsavedChangesDialog blocker={blocker} />
     </div>
   );
 }

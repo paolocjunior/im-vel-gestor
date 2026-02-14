@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useBlocker } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 /**
- * Tracks whether a form has unsaved changes and blocks navigation with a confirmation dialog.
- * Call `markSaved()` after a successful save to reset dirty state.
- * Pass `initialData` (the loaded data snapshot) and `currentData` (the live form state).
+ * Tracks whether a form has unsaved changes and warns before navigating away.
+ * Uses window.confirm + beforeunload instead of useBlocker (which requires a data router).
  */
 export function useUnsavedChanges(initialData: any, currentData: any) {
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
   const initialized = useRef(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (initialData !== null && initialData !== undefined && !initialized.current) {
@@ -18,14 +18,6 @@ export function useUnsavedChanges(initialData: any, currentData: any) {
   }, [initialData]);
 
   const isDirty = initialized.current && savedSnapshot !== "" && JSON.stringify(currentData) !== savedSnapshot;
-
-  const blocker = useBlocker(
-    useCallback(
-      ({ currentLocation, nextLocation }) =>
-        isDirty && currentLocation.pathname !== nextLocation.pathname,
-      [isDirty]
-    )
-  );
 
   // Browser tab close / refresh
   useEffect(() => {
@@ -42,5 +34,14 @@ export function useUnsavedChanges(initialData: any, currentData: any) {
     setSavedSnapshot(JSON.stringify(currentData));
   }, [currentData]);
 
-  return { isDirty, blocker, markSaved };
+  /** Wrap your "Voltar" navigation with this to get a confirm prompt when dirty */
+  const guardedNavigate = useCallback((to: string) => {
+    if (isDirty) {
+      const leave = window.confirm("Você tem alterações não salvas. Deseja sair sem salvar?");
+      if (!leave) return;
+    }
+    navigate(to);
+  }, [isDirty, navigate]);
+
+  return { isDirty, markSaved, guardedNavigate };
 }
