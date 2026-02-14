@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { lookupCEP } from "@/lib/cepLookup";
 import { recomputeAndSave } from "@/lib/recomputeService";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 
 export default function EditStudyPage() {
   const { id } = useParams();
@@ -24,6 +26,8 @@ export default function EditStudyPage() {
   const [saving, setSaving] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
 
+  const [initialForm, setInitialForm] = useState<typeof form | null>(null);
+
   useEffect(() => {
     if (user && id) loadStudy();
   }, [user, id]);
@@ -31,14 +35,18 @@ export default function EditStudyPage() {
   const loadStudy = async () => {
     const { data } = await supabase.from("studies").select("*").eq("id", id).single();
     if (!data) { navigate("/hub"); return; }
-    setForm({
+    const loaded = {
       name: data.name || "", cep: data.cep || "", street: data.street || "",
       street_number: data.street_number || "", complement: data.complement || "",
       neighborhood: data.neighborhood || "", city: data.city || "",
       state: data.state || "", notes: data.notes || "",
-    });
+    };
+    setForm(loaded);
+    setInitialForm(loaded);
     setLoading(false);
   };
+
+  const { isDirty, blocker, markSaved } = useUnsavedChanges(initialForm, form);
 
   const handleCEP = async () => {
     setCepLoading(true);
@@ -62,6 +70,7 @@ export default function EditStudyPage() {
     if (error) { toast.error("Erro ao salvar."); setSaving(false); return; }
     await recomputeAndSave(id!, user!.id);
     setSaving(false);
+    markSaved();
     toast.success("Projeto atualizado!");
     if (goBack) navigate(`/studies/${id}/dashboard`);
   };
@@ -98,6 +107,7 @@ export default function EditStudyPage() {
           </div>
         </div>
       </div>
+      <UnsavedChangesDialog blocker={blocker} />
     </div>
   );
 }

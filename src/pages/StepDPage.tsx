@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { recomputeAndSave } from "@/lib/recomputeService";
 import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 import AttachmentSection from "@/components/AttachmentSection";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 
 export default function StepDPage() {
   const { id } = useParams();
@@ -29,23 +31,31 @@ export default function StepDPage() {
     monthly_expenses: 0,
   });
 
+  const [initialForm, setInitialForm] = useState<typeof form | null>(null);
+
   useEffect(() => { if (user && id) loadData(); }, [user, id]);
 
   const loadData = async () => {
     const { data } = await supabase.from("study_inputs")
       .select("months_to_sale, monthly_financing_payment, has_condo_fee, condo_fee, iptu_mode, iptu_value, monthly_expenses")
       .eq("study_id", id).single();
-    if (data) setForm({
-      months_to_sale: data.months_to_sale || 0,
-      monthly_financing_payment: Number(data.monthly_financing_payment),
-      has_condo_fee: data.has_condo_fee,
-      condo_fee: Number(data.condo_fee),
-      iptu_mode: data.iptu_mode,
-      iptu_value: Number(data.iptu_value),
-      monthly_expenses: Number(data.monthly_expenses),
-    });
+    if (data) {
+      const loaded = {
+        months_to_sale: data.months_to_sale || 0,
+        monthly_financing_payment: Number(data.monthly_financing_payment),
+        has_condo_fee: data.has_condo_fee,
+        condo_fee: Number(data.condo_fee),
+        iptu_mode: data.iptu_mode,
+        iptu_value: Number(data.iptu_value),
+        monthly_expenses: Number(data.monthly_expenses),
+      };
+      setForm(loaded);
+      setInitialForm(loaded);
+    }
     setLoading(false);
   };
+
+  const { isDirty, blocker, markSaved } = useUnsavedChanges(initialForm, form);
 
   const setNum = (k: string, v: number) => setForm(f => ({ ...f, [k]: v }));
 
@@ -71,6 +81,7 @@ export default function StepDPage() {
     if (error) { toast.error("Erro ao salvar."); setSaving(false); return; }
     await recomputeAndSave(id!, user!.id);
     setSaving(false);
+    markSaved();
     toast.success("Custos até a venda salvos!");
     if (goBack) navigate(`/studies/${id}/dashboard`);
   };
@@ -134,6 +145,7 @@ export default function StepDPage() {
           </div>
         </div>
       </div>
+      <UnsavedChangesDialog blocker={blocker} />
     </div>
   );
 }

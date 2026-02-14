@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { recomputeAndSave } from "@/lib/recomputeService";
 import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 import AttachmentSection from "@/components/AttachmentSection";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 
 export default function StepEPage() {
   const { id } = useParams();
@@ -31,6 +33,8 @@ export default function StepEPage() {
     sale_notes: "",
   });
 
+  const [initialForm, setInitialForm] = useState<typeof form | null>(null);
+
   useEffect(() => { if (user && id) loadData(); }, [user, id]);
 
   const loadData = async () => {
@@ -46,7 +50,7 @@ export default function StepEPage() {
       setAreas(areaData);
       const saleVal = Number(data.sale_value);
       const area = areaData.usable_area_m2 || areaData.total_area_m2 || areaData.land_area_m2;
-      setForm({
+      const loaded = {
         sale_value: saleVal,
         sale_price_per_m2: area > 0 && saleVal > 0 ? Number((saleVal / area).toFixed(2)) : Number(data.sale_price_per_m2),
         payoff_at_sale: Number(data.payoff_at_sale),
@@ -55,10 +59,14 @@ export default function StepEPage() {
         brokerage_value: Number(data.brokerage_value),
         income_tax: Number(data.income_tax),
         sale_notes: data.sale_notes || "",
-      });
+      };
+      setForm(loaded);
+      setInitialForm(loaded);
     }
     setLoading(false);
   };
+
+  const { isDirty, blocker, markSaved } = useUnsavedChanges(initialForm, form);
 
   const setNum = (k: string, v: number) => {
     setForm(f => {
@@ -99,6 +107,7 @@ export default function StepEPage() {
     if (error) { toast.error("Erro ao salvar."); setSaving(false); return; }
     await recomputeAndSave(id!, user!.id);
     setSaving(false);
+    markSaved();
     toast.success("Dados da venda salvos!");
     if (goBack) navigate(`/studies/${id}/dashboard`);
   };
@@ -169,6 +178,7 @@ export default function StepEPage() {
           </div>
         </div>
       </div>
+      <UnsavedChangesDialog blocker={blocker} />
     </div>
   );
 }
