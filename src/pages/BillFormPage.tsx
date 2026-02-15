@@ -189,46 +189,7 @@ export default function BillFormPage() {
     if (user && studyId) { loadVendors(); loadBanks(); loadCostCenters(); }
   }, [user, studyId]);
 
-  // Restore form state from sessionStorage
   const STORAGE_KEY = `bill_form_draft_${studyId}`;
-  useEffect(() => {
-    if (!isNew || isClone) return;
-    const saved = sessionStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        if (data.vendorId) setVendorId(data.vendorId);
-        if (data.description) setDescription(data.description);
-        if (data.totalAmount) setTotalAmount(data.totalAmount);
-        if (data.costCenter) setCostCenter(data.costCenter);
-        if (data.category) setCategory(data.category);
-        if (data.accountId) setAccountId(data.accountId);
-        if (data.paymentMethod) setPaymentMethod(data.paymentMethod);
-        if (data.installmentPlan) setInstallmentPlan(data.installmentPlan);
-        if (data.firstDueDate) setFirstDueDate(data.firstDueDate);
-        if (data.intervalDays !== undefined) setIntervalDays(data.intervalDays);
-        if (data.notes) setNotes(data.notes);
-      } catch {}
-      sessionStorage.removeItem(STORAGE_KEY);
-    }
-  }, []);
-
-  // Save form state to sessionStorage before navigating away (for new bills)
-  const saveFormDraft = useCallback(() => {
-    if (!isNew || isClone || isView) return;
-    const hasData = description || totalAmount > 0 || costCenter || category || accountId || paymentMethod || notes;
-    if (hasData) {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-        vendorId, description, totalAmount, costCenter, category,
-        accountId, paymentMethod, installmentPlan, firstDueDate, intervalDays, notes,
-      }));
-    }
-  }, [isNew, isClone, isView, vendorId, description, totalAmount, costCenter, category, accountId, paymentMethod, installmentPlan, firstDueDate, intervalDays, notes, STORAGE_KEY]);
-
-  // Auto-save draft to sessionStorage whenever form changes
-  useEffect(() => {
-    saveFormDraft();
-  }, [saveFormDraft]);
 
   // Set initial snapshot for new bills
   useEffect(() => {
@@ -505,6 +466,35 @@ export default function BillFormPage() {
       setInstallments(prev => prev.map(r => r._frozen ? r : { ...r, amount: newTotal }));
     } else if (installmentPlan !== "AVISTA" && installments.length > 0) {
       redistributeAmounts(installments, newTotal);
+    }
+  };
+
+  // Sync payment method changes to unfrozen installments
+  const handlePaymentMethodChange = (newPM: string) => {
+    setPaymentMethod(newPM);
+    if (installments.length > 0) {
+      setInstallments(prev => prev.map(r => r._frozen || r._status === "PAID" ? r : { ...r, payment_method: newPM }));
+    }
+  };
+
+  // Sync account changes to unfrozen installments
+  const handleAccountChange = (newAcc: string) => {
+    setAccountId(newAcc);
+    if (installments.length > 0) {
+      setInstallments(prev => prev.map(r => r._frozen || r._status === "PAID" ? r : { ...r, account_id: newAcc }));
+    }
+  };
+
+  // Sync description changes to unfrozen installments
+  const handleDescriptionChange = (newDesc: string) => {
+    setDescription(newDesc);
+    if (installments.length > 0) {
+      if (billType === "recorrente") {
+        setInstallments(prev => prev.map(r => r._frozen || r._status === "PAID" ? r : { ...r, description: newDesc }));
+      } else {
+        const count = installments.length;
+        setInstallments(prev => prev.map((r, i) => r._frozen || r._status === "PAID" ? r : { ...r, description: `${newDesc} ${i + 1}/${count}` }));
+      }
     }
   };
 
@@ -788,7 +778,7 @@ export default function BillFormPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Descrição:</Label>
-              <Input value={description} onChange={e => setDescription(e.target.value)} maxLength={80} disabled={isView} />
+              <Input value={description} onChange={e => handleDescriptionChange(e.target.value)} maxLength={80} disabled={isView} />
             </div>
             <div className="space-y-1.5">
               <Label>Valor Total:</Label>
@@ -915,7 +905,7 @@ export default function BillFormPage() {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="space-y-1.5">
               <Label>Conta:</Label>
-              <Select value={accountId} onValueChange={setAccountId} disabled={isView}>
+              <Select value={accountId} onValueChange={handleAccountChange} disabled={isView}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   {banks.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
@@ -924,7 +914,7 @@ export default function BillFormPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Forma de Pagamento:</Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod} disabled={isView}>
+              <Select value={paymentMethod} onValueChange={handlePaymentMethodChange} disabled={isView}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   {PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
