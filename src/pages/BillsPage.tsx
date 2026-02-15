@@ -159,9 +159,13 @@ export default function BillsPage() {
   };
 
   // Cascading filter options: each filter's options come from data filtered by ALL OTHER active filters
+  // Cascading filter options including period
   const filterOptions = useMemo(() => {
     const getFiltered = (excludeKey: FilterKey) => {
       return installments.filter(inst => {
+        // Period always applies
+        if (periodStart && inst.due_date < periodStart) return false;
+        if (periodEnd && inst.due_date > periodEnd) return false;
         if (excludeKey !== "due_date" && filters.due_date.length && !filters.due_date.includes(formatDateBR(inst.due_date))) return false;
         if (excludeKey !== "cost_center" && filters.cost_center.length && !filters.cost_center.includes(inst.bill_cost_center || "")) return false;
         if (excludeKey !== "category" && filters.category.length && !filters.category.includes(inst.bill_category || "")) return false;
@@ -176,7 +180,7 @@ export default function BillsPage() {
       category: [...new Set(getFiltered("category").map(i => i.bill_category || "").filter(Boolean))].sort(),
       status: [...new Set(getFiltered("status").map(i => i.status === "PAID" ? "Pago" : "Pendente"))].sort(),
     };
-  }, [installments, filters]);
+  }, [installments, filters, periodStart, periodEnd]);
 
   const applyFilters = () => {
     setAppliedFilters({ periodStart, periodEnd, filters: { ...filters }, searchQuery });
