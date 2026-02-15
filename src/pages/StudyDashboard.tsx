@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  ShoppingCart, DollarSign, Users, FileText, Wallet, HardHat, Plus, Pencil,
+  ShoppingCart, DollarSign, Users, FileText, Wallet, HardHat, Plus, Pencil, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import StageEtapa from "@/components/dashboard/StageEtapa";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import ResultCard from "@/components/dashboard/ResultCard";
 import GlobalTopbar from "@/components/GlobalTopbar";
 import { useAuth } from "@/hooks/useAuth";
@@ -12,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { recomputeAndSave } from "@/lib/recomputeService";
 import { formatBRL, formatPercent } from "@/lib/recompute";
 import { toast } from "sonner";
+import { formatDateBR } from "@/lib/billConstants";
 
 type StageStatus = "nao_iniciado" | "incompleto" | "completo" | "dispensado";
 
@@ -57,6 +59,7 @@ const StudyDashboard = () => {
   const [inputs, setInputs] = useState<any>(null);
   const [computed, setComputed] = useState<any>(null);
   const [billsPaidTotal, setBillsPaidTotal] = useState(0);
+  const [overdueInstallments, setOverdueInstallments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
 
@@ -68,11 +71,13 @@ const StudyDashboard = () => {
   };
 
   const loadAll = async () => {
-    const [studyRes, inputsRes, computedRes, billsRes] = await Promise.all([
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const [studyRes, inputsRes, computedRes, billsRes, overdueRes] = await Promise.all([
       supabase.from("studies").select("*").eq("id", id).single(),
       supabase.from("study_inputs").select("*").eq("study_id", id).single(),
       supabase.from("study_computed").select("*").eq("study_id", id).single(),
       supabase.from("bill_installments").select("amount").eq("study_id", id).eq("status", "PAID").eq("is_deleted", false),
+      supabase.from("bill_installments").select("id, due_date, amount, description, bill_id").eq("study_id", id).eq("is_deleted", false).neq("status", "PAID").lt("due_date", todayISO),
     ]);
     if (!studyRes.data) { navigate("/hub"); return; }
     setStudy(studyRes.data);
@@ -80,6 +85,7 @@ const StudyDashboard = () => {
     setComputed(computedRes.data);
     const total = (billsRes.data || []).reduce((sum, r) => sum + Number(r.amount), 0);
     setBillsPaidTotal(total);
+    setOverdueInstallments(overdueRes.data || []);
     setLoading(false);
   };
 
@@ -110,8 +116,38 @@ const StudyDashboard = () => {
         </button>
       </div>
 
+      {/* Alerts banner - only visible when there are alerts */}
+      {overdueInstallments.length > 0 && (
+        <div className="max-w-[1440px] mx-auto px-6 pt-4">
+          <Alert variant="destructive" className="border-destructive/30 bg-destructive/5">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle className="text-sm font-semibold">
+              {overdueInstallments.length === 1
+                ? "1 vencimento atrasado"
+                : `${overdueInstallments.length} vencimentos atrasados`}
+            </AlertTitle>
+            <AlertDescription className="text-xs mt-1 space-y-0.5">
+              {overdueInstallments.slice(0, 5).map((inst) => (
+                <p key={inst.id}>
+                  <button
+                    className="text-destructive hover:underline font-medium"
+                    onClick={() => navigate(`/studies/${id}/bills`)}
+                  >
+                    {inst.description || "Parcela"} — {formatBRL(Number(inst.amount))} — venc. {formatDateBR(inst.due_date)}
+                  </button>
+                </p>
+              ))}
+              {overdueInstallments.length > 5 && (
+                <p className="text-muted-foreground">e mais {overdueInstallments.length - 5}…</p>
+              )}
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
       <div className="max-w-[1440px] mx-auto px-6 py-6">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+
 
           {/* D1 */}
           <aside className="md:col-span-3 order-1">
@@ -204,12 +240,6 @@ const StudyDashboard = () => {
           <aside className="md:col-span-3 order-3 space-y-4">
             <h2 className="font-bold text-base">Resultados</h2>
 
-            <ResultCard label="Total custos aquisição" value={fmtMoney(computed?.acquisition_total)} subtitle="Completo" colorClass="result-acquisition" />
-            <ResultCard label="Total custos até venda" value={fmtMoney(computed?.holding_total)} subtitle="Completo" colorClass="result-holding" />
-            <ResultCard label="Total desembolsado" value={fmtMoney(computed?.total_disbursed)} subtitle="Completo" colorClass="result-disbursed" />
-            <ResultCard label="Lucro" value={fmtMoney(computed?.profit)} subtitle="Completo" colorClass="result-profit" />
-            <ResultCard label="ROI" value={fmtPct(computed?.roi)} subtitle="Completo" colorClass="result-roi" />
-
             <div className="card-dashboard result-indicator space-y-3">
               <p className="text-xs font-semibold">Indicador</p>
               <p className={`kpi-value ${viabilityColor[viability]}`}>{viabilityLabel[viability]}</p>
@@ -224,6 +254,12 @@ const StudyDashboard = () => {
                 <p><span className="inline-block w-2 h-2 rounded-full bg-warning mr-1.5" />Atenção: ROI &lt; 10%</p>
               </div>
             </div>
+
+            <ResultCard label="Total custos aquisição" value={fmtMoney(computed?.acquisition_total)} subtitle="Completo" colorClass="result-acquisition" />
+            <ResultCard label="Total custos até venda" value={fmtMoney(computed?.holding_total)} subtitle="Completo" colorClass="result-holding" />
+            <ResultCard label="Total desembolsado" value={fmtMoney(computed?.total_disbursed)} subtitle="Completo" colorClass="result-disbursed" />
+            <ResultCard label="Lucro" value={fmtMoney(computed?.profit)} subtitle="Completo" colorClass="result-profit" />
+            <ResultCard label="ROI" value={fmtPct(computed?.roi)} subtitle="Completo" colorClass="result-roi" />
           </aside>
         </div>
       </div>
