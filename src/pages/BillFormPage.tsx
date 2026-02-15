@@ -1062,7 +1062,7 @@ export default function BillFormPage() {
           {isView ? (
             <>
               <Button onClick={() => navigate(`/studies/${studyId}/bills/${billId}?mode=edit`)}>Editar</Button>
-              <Button variant="outline" onClick={() => guardedNavigate(`/studies/${studyId}/bills`)}>Voltar</Button>
+              <Button variant="outline" onClick={() => navigate(`/studies/${studyId}/bills`)}>Voltar</Button>
             </>
           ) : (
             <>
