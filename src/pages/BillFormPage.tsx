@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Paperclip, Upload, X, Download } from "lucide-react";
+import { MonthRangePicker } from "@/components/MonthRangePicker";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 import { Button } from "@/components/ui/button";
@@ -72,6 +73,12 @@ export default function BillFormPage() {
   const [firstDueDate, setFirstDueDate] = useState(todayISO());
   const [intervalDays, setIntervalDays] = useState<number | "">(30);
   const [notes, setNotes] = useState("");
+
+  // Bill type: compras or recorrente
+  const [billType, setBillType] = useState("");
+  const [recurrence, setRecurrence] = useState("");
+  const [recurrenceDay, setRecurrenceDay] = useState(1);
+  const [recurrencePeriod, setRecurrencePeriod] = useState<{start: {year: number; month: number}; end: {year: number; month: number}} | null>(null);
 
   // Installment rows
   const [installments, setInstallments] = useState<InstallmentRow[]>([]);
@@ -327,6 +334,8 @@ export default function BillFormPage() {
     setAccountId(bill.account_id || "");
     setPaymentMethod(bill.payment_method || "");
     setInstallmentPlan(bill.installment_plan);
+    if (bill.installment_plan === "RECORRENTE") setBillType("recorrente");
+    else setBillType("compras");
     setFirstDueDate(bill.first_due_date || todayISO());
     setIntervalDays(bill.interval_days || 30);
     setNotes(bill.notes || "");
@@ -398,6 +407,43 @@ export default function BillFormPage() {
     setInstallments(rows);
   }, []);
 
+  // Recurrence installment generation
+  useEffect(() => {
+    if (billType === "recorrente" && recurrence && recurrenceDay && recurrencePeriod) {
+      const { start, end } = recurrencePeriod;
+      const dates: string[] = [];
+      if (recurrence === "Mensal") {
+        let y = start.year, m = start.month;
+        while (y < end.year || (y === end.year && m <= end.month)) {
+          const lastDay = new Date(y, m, 0).getDate();
+          const day = Math.min(recurrenceDay, lastDay);
+          dates.push(`${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+          m++; if (m > 12) { m = 1; y++; }
+        }
+      } else {
+        const iv = recurrence === "Quinzenal" ? 15 : 7;
+        const firstLastDay = new Date(start.year, start.month, 0).getDate();
+        const firstDay = Math.min(recurrenceDay, firstLastDay);
+        let current = new Date(start.year, start.month - 1, firstDay);
+        const endLastDay = new Date(end.year, end.month, 0).getDate();
+        const endDate = new Date(end.year, end.month - 1, endLastDay);
+        while (current <= endDate) {
+          dates.push(current.toISOString().slice(0, 10));
+          current = new Date(current);
+          current.setDate(current.getDate() + iv);
+        }
+      }
+      setInstallments(dates.map(d => ({
+        _key: nk(), due_date: d, amount: totalAmount, payment_method: paymentMethod,
+        account_id: accountId, description: description, _frozen: false,
+      })));
+      setShowInstallments(dates.length > 0);
+    } else if (billType === "recorrente") {
+      setInstallments([]);
+      setShowInstallments(false);
+    }
+  }, [billType, recurrence, recurrenceDay, recurrencePeriod]);
+
   const handlePlanChange = (plan: string) => {
     setInstallmentPlan(plan);
     if (plan === "AVISTA") {
@@ -455,7 +501,9 @@ export default function BillFormPage() {
 
   const handleTotalAmountChange = (newTotal: number) => {
     setTotalAmount(newTotal);
-    if (installmentPlan !== "AVISTA" && installments.length > 0) {
+    if (billType === "recorrente" && installments.length > 0) {
+      setInstallments(prev => prev.map(r => r._frozen ? r : { ...r, amount: newTotal }));
+    } else if (installmentPlan !== "AVISTA" && installments.length > 0) {
       redistributeAmounts(installments, newTotal);
     }
   };
@@ -488,8 +536,12 @@ export default function BillFormPage() {
   };
 
   const handleInstallmentAmountChange = (key: number, newAmount: number) => {
-    const updated = installments.map(r => r._key === key ? { ...r, amount: newAmount, _frozen: true } : r);
-    redistributeAmounts(updated, totalAmount);
+    if (billType === "recorrente") {
+      setInstallments(prev => prev.map(r => r._key === key ? { ...r, amount: newAmount } : r));
+    } else {
+      const updated = installments.map(r => r._key === key ? { ...r, amount: newAmount, _frozen: true } : r);
+      redistributeAmounts(updated, totalAmount);
+    }
   };
 
   const handleInstallmentFieldChange = (key: number, field: string, value: string) => {
@@ -560,11 +612,14 @@ export default function BillFormPage() {
 
   // === Save ===
   const saveBill = async () => {
+    if (!vendorId) { toast.error("Fornecedor é obrigatório."); return; }
     if (!description.trim()) { toast.error("Descrição é obrigatória."); return; }
     if (totalAmount <= 0) { toast.error("Valor total deve ser maior que zero."); return; }
+    if (!costCenter) { toast.error("Centro de Custo é obrigatório."); return; }
+    if (!category) { toast.error("Categoria é obrigatória."); return; }
 
-    // Validate installment sum (only count non-paid for edit mode)
-    if (showInstallments && installments.length > 0) {
+    // Validate installment sum (only for compras, not recorrente)
+    if (billType !== "recorrente" && showInstallments && installments.length > 0) {
       const sum = installments.reduce((s, r) => new Decimal(s).plus(r.amount).toNumber(), 0);
       const diff = Math.abs(new Decimal(totalAmount).minus(sum).toNumber());
       if (diff > 0.01) {
@@ -585,6 +640,7 @@ export default function BillFormPage() {
     setSaving(true);
 
     const effectiveInterval = typeof intervalDays === "number" ? intervalDays : 30;
+    const effectivePlan = billType === "recorrente" ? "RECORRENTE" : installmentPlan;
 
     const billPayload = {
       study_id: studyId!,
@@ -595,8 +651,8 @@ export default function BillFormPage() {
       category: category || null,
       account_id: accountId || null,
       payment_method: paymentMethod || null,
-      installment_plan: installmentPlan,
-      first_due_date: installmentPlan === "AVISTA" ? firstDueDate : null,
+      installment_plan: effectivePlan,
+      first_due_date: effectivePlan === "AVISTA" ? firstDueDate : null,
       interval_days: effectiveInterval,
       notes: notes || null,
     };
@@ -629,7 +685,7 @@ export default function BillFormPage() {
           }));
           await supabase.from("bill_installments").insert(inserts);
         }
-      } else if (installmentPlan === "AVISTA") {
+      } else if (effectivePlan === "AVISTA") {
         // Update the single pending installment
         const { data: existingInsts } = await supabase.from("bill_installments")
           .select("id").eq("bill_id", billId).eq("is_deleted", false).eq("status", "PENDING");
@@ -659,7 +715,7 @@ export default function BillFormPage() {
       setPendingFiles([]);
     }
 
-    if (installmentPlan === "AVISTA") {
+    if (effectivePlan === "AVISTA") {
       await supabase.from("bill_installments").insert({
         bill_id: newBill.id,
         study_id: studyId!,
@@ -774,6 +830,90 @@ export default function BillFormPage() {
           <legend className="font-bold text-sm px-2">Condição de Pagamento:</legend>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="space-y-1.5">
+              <Label>Tipo:</Label>
+              <Select value={billType} onValueChange={v => {
+                setBillType(v);
+                if (v === "compras") {
+                  setRecurrence(""); setRecurrenceDay(1); setRecurrencePeriod(null);
+                  setInstallments([]); setShowInstallments(false);
+                } else if (v === "recorrente") {
+                  setInstallmentPlan("AVISTA");
+                  setInstallments([]); setShowInstallments(false);
+                }
+              }} disabled={isView}>
+                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="compras">Compras</SelectItem>
+                  <SelectItem value="recorrente">Recorrente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {billType === "recorrente" ? (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Recorrência:</Label>
+                  <Select value={recurrence} onValueChange={setRecurrence} disabled={isView}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Semanal">Semanal</SelectItem>
+                      <SelectItem value="Quinzenal">Quinzenal</SelectItem>
+                      <SelectItem value="Mensal">Mensal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Dia do Venc.:</Label>
+                  <Select value={String(recurrenceDay)} onValueChange={v => setRecurrenceDay(Number(v))} disabled={isView}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 31 }, (_, i) => (
+                        <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label>Período:</Label>
+                  <MonthRangePicker value={recurrencePeriod} onChange={setRecurrencePeriod} disabled={isView} />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Parcelamento:</Label>
+                  <Select value={installmentPlan} onValueChange={handlePlanChange} disabled={isView || !billType}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {INSTALLMENT_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>1° Vencimento:</Label>
+                  <Input type="date" value={firstDueDate} onChange={e => setFirstDueDate(e.target.value)} disabled={isView || !billType} />
+                </div>
+                {installmentPlan !== "AVISTA" && billType === "compras" && (
+                  <div className="space-y-1.5">
+                    <Label>Intervalo (dias):</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={intervalDays === "" ? "" : intervalDays}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === "") { setIntervalDays(""); }
+                        else { const num = Number(val); setIntervalDays(num); if (num > 0) handleIntervalChange(num); }
+                      }}
+                      onBlur={() => { if (intervalDays === "" || intervalDays === 0) { setIntervalDays(30); handleIntervalChange(30); } }}
+                      disabled={isView}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="space-y-1.5">
               <Label>Conta:</Label>
               <Select value={accountId} onValueChange={setAccountId} disabled={isView}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
@@ -791,55 +931,13 @@ export default function BillFormPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label>Parcelamento:</Label>
-              <Select value={installmentPlan} onValueChange={handlePlanChange} disabled={isView}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {INSTALLMENT_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            {installmentPlan === "AVISTA" && (
-              <div className="space-y-1.5">
-                <Label>1° Vencimento:</Label>
-                <Input type="date" value={firstDueDate} onChange={e => setFirstDueDate(e.target.value)} disabled={isView} />
-              </div>
-            )}
-            {installmentPlan !== "AVISTA" && (
-              <div className="space-y-1.5">
-                <Label>Intervalo (dias):</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={intervalDays === "" ? "" : intervalDays}
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (val === "") {
-                      setIntervalDays("");
-                    } else {
-                      const num = Number(val);
-                      setIntervalDays(num);
-                      if (num > 0) handleIntervalChange(num);
-                    }
-                  }}
-                  onBlur={() => {
-                    if (intervalDays === "" || intervalDays === 0) {
-                      setIntervalDays(30);
-                      handleIntervalChange(30);
-                    }
-                  }}
-                  disabled={isView}
-                />
-              </div>
-            )}
           </div>
         </fieldset>
 
         {/* Block 3: Parcelas */}
         {showInstallments && installments.length > 0 && (
           <fieldset className="border rounded-lg p-4 space-y-4" disabled={isView}>
-            <legend className="font-bold text-sm px-2">Parcelas:</legend>
+            <legend className="font-bold text-sm px-2">{billType === "recorrente" ? "Vencimentos:" : "Parcelas:"}</legend>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>

@@ -239,7 +239,12 @@ export default function VendorsPage() {
       <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
         <h1 className="text-xl font-bold">Fornecedores</h1>
 
-        <Button size="sm" onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Novo Fornecedor</Button>
+        <div className="flex items-center justify-between">
+          <Button size="sm" onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Novo Fornecedor</Button>
+          <Button variant="outline" size="sm" onClick={() => navigate(`/studies/${studyId}/dashboard`)}>
+            <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
+          </Button>
+        </div>
 
         {/* Filters */}
         {vendors.length > 0 && (
@@ -304,9 +309,6 @@ export default function VendorsPage() {
           </div>
         )}
 
-        <Button variant="outline" size="sm" onClick={() => navigate(`/studies/${studyId}/dashboard`)}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar ao dashboard
-        </Button>
       </div>
 
       {/* Form Dialog */}
