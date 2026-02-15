@@ -158,14 +158,25 @@ export default function BillsPage() {
     setLoading(false);
   };
 
-  // Filter options
+  // Cascading filter options: each filter's options come from data filtered by ALL OTHER active filters
   const filterOptions = useMemo(() => {
-    const dueDates = [...new Set(installments.map(i => formatDateBR(i.due_date)))].sort();
-    const costCenters = [...new Set(installments.map(i => i.bill_cost_center || "").filter(Boolean))].sort();
-    const categories = [...new Set(installments.map(i => i.bill_category || "").filter(Boolean))].sort();
-    const statuses = [...new Set(installments.map(i => i.status === "PAID" ? "Pago" : "Pendente"))].sort();
-    return { due_date: dueDates, cost_center: costCenters, category: categories, status: statuses };
-  }, [installments]);
+    const getFiltered = (excludeKey: FilterKey) => {
+      return installments.filter(inst => {
+        if (excludeKey !== "due_date" && filters.due_date.length && !filters.due_date.includes(formatDateBR(inst.due_date))) return false;
+        if (excludeKey !== "cost_center" && filters.cost_center.length && !filters.cost_center.includes(inst.bill_cost_center || "")) return false;
+        if (excludeKey !== "category" && filters.category.length && !filters.category.includes(inst.bill_category || "")) return false;
+        const statusLabel = inst.status === "PAID" ? "Pago" : "Pendente";
+        if (excludeKey !== "status" && filters.status.length && !filters.status.includes(statusLabel)) return false;
+        return true;
+      });
+    };
+    return {
+      due_date: [...new Set(getFiltered("due_date").map(i => formatDateBR(i.due_date)))].sort(),
+      cost_center: [...new Set(getFiltered("cost_center").map(i => i.bill_cost_center || "").filter(Boolean))].sort(),
+      category: [...new Set(getFiltered("category").map(i => i.bill_category || "").filter(Boolean))].sort(),
+      status: [...new Set(getFiltered("status").map(i => i.status === "PAID" ? "Pago" : "Pendente"))].sort(),
+    };
+  }, [installments, filters]);
 
   const applyFilters = () => {
     setAppliedFilters({ periodStart, periodEnd, filters: { ...filters }, searchQuery });
