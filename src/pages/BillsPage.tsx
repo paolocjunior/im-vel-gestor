@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 import { ArrowLeft, ArrowUp, ArrowDown, Paperclip } from "lucide-react";
 import {
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
@@ -118,6 +120,12 @@ export default function BillsPage() {
   const [deleteInst, setDeleteInst] = useState<Installment | null>(null);
   const [deleteMode, setDeleteMode] = useState<"single" | "all_pending" | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  // Overdue payment dialog
+  const [overdueInst, setOverdueInst] = useState<Installment | null>(null);
+  const [overdueInterest, setOverdueInterest] = useState(0);
+  const [overdueFine, setOverdueFine] = useState(0);
+  const [overduePaymentDate, setOverduePaymentDate] = useState(todayISO());
 
   useEffect(() => { if (user && studyId) { loadData(); loadBanks(); } }, [user, studyId]);
 
@@ -346,6 +354,15 @@ export default function BillsPage() {
   const handleAction = (action: string, inst: Installment) => {
     switch (action) {
       case "pay": {
+        const isOverdue = getDisplayStatus(inst.status, inst.due_date) === "Atrasado";
+        if (isOverdue) {
+          // Show overdue dialog with interest/fine fields
+          setOverdueInst(inst);
+          setOverdueInterest(0);
+          setOverdueFine(0);
+          setOverduePaymentDate(todayISO());
+          break;
+        }
         // Validate account_id and payment_method
         const hasAccount = !!inst.account_id;
         const hasMethod = !!inst.payment_method;
@@ -375,6 +392,24 @@ export default function BillsPage() {
         navigate(`/studies/${studyId}/bills/${inst.bill_id}?mode=clone`);
         break;
     }
+  };
+
+  const handleOverduePayment = async () => {
+    if (!overdueInst) return;
+    // Validate account/method
+    if (!overdueInst.account_id || !overdueInst.payment_method) {
+      toast.error("Preencha Conta e Forma de Pagamento antes (edite a despesa).");
+      return;
+    }
+    const newAmount = overdueInst.amount + overdueInterest + overdueFine;
+    await supabase.from("bill_installments").update({
+      amount: newAmount,
+      status: "PAID",
+      paid_at: overduePaymentDate,
+    }).eq("id", overdueInst.id);
+    setOverdueInst(null);
+    toast.success("Pagamento registrado com juros/multa!");
+    loadData();
   };
 
   return (
@@ -580,6 +615,40 @@ export default function BillsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Overdue Payment Dialog */}
+      <Dialog open={!!overdueInst} onOpenChange={() => setOverdueInst(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Vencimento Atrasado</DialogTitle></DialogHeader>
+          {overdueInst && (
+            <div className="space-y-3">
+              <p className="text-sm text-destructive font-medium">
+                Este vencimento estava previsto para {formatDateBR(overdueInst.due_date)} e está atrasado. Deseja adicionar juros e multa?
+              </p>
+              <p className="text-sm">Valor original: <strong>{formatBRL(overdueInst.amount)}</strong></p>
+              <div className="space-y-1.5">
+                <Label>Juros (R$):</Label>
+                <MaskedNumberInput value={overdueInterest} onValueChange={setOverdueInterest} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Multa (R$):</Label>
+                <MaskedNumberInput value={overdueFine} onValueChange={setOverdueFine} />
+              </div>
+              <p className="text-sm font-medium">
+                Valor final: <strong>{formatBRL(overdueInst.amount + overdueInterest + overdueFine)}</strong>
+              </p>
+              <div className="space-y-1.5">
+                <Label>Data do Pagamento:</Label>
+                <Input type="date" value={overduePaymentDate} onChange={e => setOverduePaymentDate(e.target.value)} />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOverdueInst(null)}>Cancelar</Button>
+            <Button onClick={handleOverduePayment}>Confirmar Pagamento</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
