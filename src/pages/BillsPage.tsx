@@ -51,6 +51,12 @@ type SortKey = "due_date" | "description" | "amount" | "cost_center" | "category
 
 type FilterKey = "due_date" | "cost_center" | "category" | "status";
 
+const getDisplayStatus = (status: string, due_date: string) => {
+  if (status === "PAID") return "Pago";
+  if (due_date < todayISO()) return "Atrasado";
+  return "Pendente";
+};
+
 function FilterDropdown({ label, options, selected, onToggle }: {
   label: string; options: string[]; selected: string[]; onToggle: (v: string) => void;
 }) {
@@ -169,7 +175,7 @@ export default function BillsPage() {
         if (excludeKey !== "due_date" && filters.due_date.length && !filters.due_date.includes(formatDateBR(inst.due_date))) return false;
         if (excludeKey !== "cost_center" && filters.cost_center.length && !filters.cost_center.includes(inst.bill_cost_center || "")) return false;
         if (excludeKey !== "category" && filters.category.length && !filters.category.includes(inst.bill_category || "")) return false;
-        const statusLabel = inst.status === "PAID" ? "Pago" : "Pendente";
+        const statusLabel = getDisplayStatus(inst.status, inst.due_date);
         if (excludeKey !== "status" && filters.status.length && !filters.status.includes(statusLabel)) return false;
         return true;
       });
@@ -178,7 +184,7 @@ export default function BillsPage() {
       due_date: [...new Set(getFiltered("due_date").map(i => formatDateBR(i.due_date)))].sort(),
       cost_center: [...new Set(getFiltered("cost_center").map(i => i.bill_cost_center || "").filter(Boolean))].sort(),
       category: [...new Set(getFiltered("category").map(i => i.bill_category || "").filter(Boolean))].sort(),
-      status: [...new Set(getFiltered("status").map(i => i.status === "PAID" ? "Pago" : "Pendente"))].sort(),
+      status: [...new Set(getFiltered("status").map(i => getDisplayStatus(i.status, i.due_date)))].sort(),
     };
   }, [installments, filters, periodStart, periodEnd]);
 
@@ -223,7 +229,7 @@ export default function BillsPage() {
       if (af.filters.due_date.length && !af.filters.due_date.includes(formatDateBR(inst.due_date))) return false;
       if (af.filters.cost_center.length && !af.filters.cost_center.includes(inst.bill_cost_center || "")) return false;
       if (af.filters.category.length && !af.filters.category.includes(inst.bill_category || "")) return false;
-      const statusLabel = inst.status === "PAID" ? "Pago" : "Pendente";
+      const statusLabel = getDisplayStatus(inst.status, inst.due_date);
       if (af.filters.status.length && !af.filters.status.includes(statusLabel)) return false;
       if (af.searchQuery) {
         const q = af.searchQuery.toLowerCase();
@@ -372,9 +378,10 @@ export default function BillsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
       <GlobalTopbar />
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-5">
+      <div className="max-w-7xl w-full mx-auto px-6 pt-6 flex flex-col flex-1 min-h-0">
+        <div className="flex-shrink-0 space-y-5 pb-5">
         <h1 className="text-xl font-bold">Financeiro</h1>
 
         <div className="flex items-center justify-between">
@@ -407,14 +414,16 @@ export default function BillsPage() {
             <Button variant="outline" size="sm" onClick={clearAllFilters}>Limpar</Button>
           </div>
         </div>
+        </div>
 
+        <div className="flex-1 overflow-auto min-h-0">
         {/* Table */}
         {loading ? (
           <div className="flex justify-center py-12"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>
         ) : displayedInstallments.length === 0 ? (
           <div className="border rounded-lg p-8 text-center"><p className="text-muted-foreground">Nenhum vencimento encontrado.</p></div>
         ) : (
-          <div className="relative w-full overflow-auto">
+          <div className="relative w-full">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -439,9 +448,11 @@ export default function BillsPage() {
                     <TableCell>{inst.bill_category || "—"}</TableCell>
                     <TableCell>{inst.paid_at ? formatDateBR(inst.paid_at) : "—"}</TableCell>
                     <TableCell>
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${inst.status === "PAID" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}>
-                        {inst.status === "PAID" ? "Pago" : "Pendente"}
-                      </span>
+                      {(() => {
+                        const ds = getDisplayStatus(inst.status, inst.due_date);
+                        const cls = ds === "Pago" ? "bg-green-100 text-green-800" : ds === "Atrasado" ? "bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800";
+                        return <span className={`px-2 py-0.5 rounded text-xs font-medium ${cls}`}>{ds}</span>;
+                      })()}
                     </TableCell>
                     <TableCell className="w-8 text-center">
                       {billsWithAttachments.has(inst.bill_id) && (
@@ -470,6 +481,7 @@ export default function BillsPage() {
             </Table>
           </div>
         )}
+        </div>
       </div>
 
       {/* Payment Validation Dialog (missing account/payment method) */}
