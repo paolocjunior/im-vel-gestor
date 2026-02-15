@@ -20,7 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import Decimal from "decimal.js";
 import {
-  COST_CENTERS, COST_CENTER_OPTIONS, PAYMENT_METHODS,
+  COST_CENTERS, PAYMENT_METHODS,
   INSTALLMENT_OPTIONS, todayISO, addDaysISO,
 } from "@/lib/billConstants";
 import { formatCNPJ, formatPhone } from "@/lib/cnpjLookup";
@@ -55,6 +55,10 @@ export default function BillFormPage() {
   const [vendors, setVendors] = useState<{ id: string; name: string }[]>([]);
   const [banks, setBanks] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
+
+  // Dynamic cost centers from DB
+  const [dbCostCenters, setDbCostCenters] = useState<{ id: string; name: string; categories: string[] }[]>([]);
+  const costCenterOptions = dbCostCenters.length > 0 ? dbCostCenters.map(cc => cc.name) : Object.keys(COST_CENTERS);
 
   // Bill form
   const [vendorId, setVendorId] = useState("");
@@ -97,7 +101,12 @@ export default function BillFormPage() {
 
   const effectiveBillId = (isNew || isClone) ? null : billId;
 
-  const categoryOptions = costCenter && COST_CENTERS[costCenter] ? COST_CENTERS[costCenter] : [];
+  const categoryOptions = useMemo(() => {
+    if (!costCenter) return [];
+    const dbCC = dbCostCenters.find(cc => cc.name === costCenter);
+    if (dbCC) return dbCC.categories;
+    return COST_CENTERS[costCenter] || [];
+  }, [costCenter, dbCostCenters]);
 
   // Unsaved changes tracking
   const [initialFormData, setInitialFormData] = useState<any>(null);
@@ -112,9 +121,70 @@ export default function BillFormPage() {
     currentFormData
   );
 
+  // Load cost centers from DB
+  const loadCostCenters = async () => {
+    const { data: ccData } = await supabase.from("user_cost_centers")
+      .select("id, name")
+      .eq("user_id", user!.id)
+      .eq("is_active", true)
+      .order("name");
+    const { data: catData } = await supabase.from("user_categories")
+      .select("id, cost_center_id, name")
+      .eq("user_id", user!.id)
+      .eq("is_active", true)
+      .order("name");
+    const ccs = ((ccData as any[]) || []).map((cc: any) => ({
+      id: cc.id,
+      name: cc.name,
+      categories: ((catData as any[]) || []).filter((cat: any) => cat.cost_center_id === cc.id).map((cat: any) => cat.name),
+    }));
+    setDbCostCenters(ccs);
+  };
+
   useEffect(() => {
-    if (user && studyId) { loadVendors(); loadBanks(); }
+    if (user && studyId) { loadVendors(); loadBanks(); loadCostCenters(); }
   }, [user, studyId]);
+
+  // Restore form state from sessionStorage
+  const STORAGE_KEY = `bill_form_draft_${studyId}`;
+  useEffect(() => {
+    if (!isNew || isClone) return;
+    const saved = sessionStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        if (data.vendorId) setVendorId(data.vendorId);
+        if (data.description) setDescription(data.description);
+        if (data.totalAmount) setTotalAmount(data.totalAmount);
+        if (data.costCenter) setCostCenter(data.costCenter);
+        if (data.category) setCategory(data.category);
+        if (data.accountId) setAccountId(data.accountId);
+        if (data.paymentMethod) setPaymentMethod(data.paymentMethod);
+        if (data.installmentPlan) setInstallmentPlan(data.installmentPlan);
+        if (data.firstDueDate) setFirstDueDate(data.firstDueDate);
+        if (data.intervalDays !== undefined) setIntervalDays(data.intervalDays);
+        if (data.notes) setNotes(data.notes);
+      } catch {}
+      sessionStorage.removeItem(STORAGE_KEY);
+    }
+  }, []);
+
+  // Save form state to sessionStorage before navigating away (for new bills)
+  const saveFormDraft = useCallback(() => {
+    if (!isNew || isClone || isView) return;
+    const hasData = description || totalAmount > 0 || costCenter || category || accountId || paymentMethod || notes;
+    if (hasData) {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+        vendorId, description, totalAmount, costCenter, category,
+        accountId, paymentMethod, installmentPlan, firstDueDate, intervalDays, notes,
+      }));
+    }
+  }, [isNew, isClone, isView, vendorId, description, totalAmount, costCenter, category, accountId, paymentMethod, installmentPlan, firstDueDate, intervalDays, notes, STORAGE_KEY]);
+
+  // Auto-save draft to sessionStorage whenever form changes
+  useEffect(() => {
+    saveFormDraft();
+  }, [saveFormDraft]);
 
   // Set initial snapshot for new bills
   useEffect(() => {
@@ -537,6 +607,7 @@ export default function BillFormPage() {
       setSaving(false);
       toast.success("Despesa atualizada!");
       markSaved();
+      sessionStorage.removeItem(STORAGE_KEY);
       navigate(`/studies/${studyId}/bills`);
       return;
     }
@@ -582,6 +653,7 @@ export default function BillFormPage() {
       setSaving(false);
       toast.success("Despesa criada!");
       markSaved();
+      sessionStorage.removeItem(STORAGE_KEY);
       navigate(`/studies/${studyId}/bills`);
     }
   };
@@ -595,6 +667,7 @@ export default function BillFormPage() {
     setAvistaConfirmOpen(false);
     toast.success("Despesa criada!");
     markSaved();
+    sessionStorage.removeItem(STORAGE_KEY);
     navigate(`/studies/${studyId}/bills`);
   };
 
@@ -635,7 +708,7 @@ export default function BillFormPage() {
               <Select value={costCenter} onValueChange={v => { setCostCenter(v); setCategory(""); }} disabled={isView}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
-                  {COST_CENTER_OPTIONS.map(cc => <SelectItem key={cc} value={cc}>{cc}</SelectItem>)}
+                  {costCenterOptions.map(cc => <SelectItem key={cc} value={cc}>{cc}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

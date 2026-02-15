@@ -25,7 +25,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/recompute";
-import { formatDateBR, todayISO } from "@/lib/billConstants";
+import { formatDateBR, todayISO, PAYMENT_METHODS } from "@/lib/billConstants";
 
 interface Installment {
   id: string;
@@ -80,6 +80,7 @@ export default function BillsPage() {
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [billsWithAttachments, setBillsWithAttachments] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [banks, setBanks] = useState<{ id: string; name: string }[]>([]);
 
   // Filters
   const [periodStart, setPeriodStart] = useState("");
@@ -102,12 +103,23 @@ export default function BillsPage() {
   const [paymentDate, setPaymentDate] = useState(todayISO());
   const [paymentConfirm, setPaymentConfirm] = useState<Installment | null>(null);
 
+  // Payment validation dialog (missing fields)
+  const [paymentValidationInst, setPaymentValidationInst] = useState<Installment | null>(null);
+  const [paymentValAccount, setPaymentValAccount] = useState("");
+  const [paymentValMethod, setPaymentValMethod] = useState("");
+
   // Delete dialog
   const [deleteInst, setDeleteInst] = useState<Installment | null>(null);
   const [deleteMode, setDeleteMode] = useState<"single" | "all_pending" | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  useEffect(() => { if (user && studyId) loadData(); }, [user, studyId]);
+  useEffect(() => { if (user && studyId) { loadData(); loadBanks(); } }, [user, studyId]);
+
+  const loadBanks = async () => {
+    const { data } = await supabase.from("financial_institutions")
+      .select("id, name").eq("user_id", user!.id).eq("is_active", true).order("name");
+    setBanks(data || []);
+  };
 
   const loadData = async () => {
     // Load installments with bill info
@@ -246,6 +258,19 @@ export default function BillsPage() {
     loadData();
   };
 
+  const handlePaymentValidationConfirm = async () => {
+    if (!paymentValidationInst) return;
+    if (!paymentValAccount) { toast.error("Conta é obrigatória."); return; }
+    if (!paymentValMethod) { toast.error("Forma de Pagamento é obrigatória."); return; }
+    await supabase.from("bill_installments").update({
+      account_id: paymentValAccount,
+      payment_method: paymentValMethod,
+    }).eq("id", paymentValidationInst.id);
+    setPaymentDate(todayISO());
+    setPaymentInstId(paymentValidationInst.id);
+    setPaymentValidationInst(null);
+  };
+
   const handleReopen = async (instId: string) => {
     await supabase.from("bill_installments").update({ status: "PENDING", paid_at: null }).eq("id", instId);
     toast.success("Vencimento reaberto.");
@@ -299,10 +324,20 @@ export default function BillsPage() {
 
   const handleAction = (action: string, inst: Installment) => {
     switch (action) {
-      case "pay":
-        setPaymentDate(todayISO());
-        setPaymentInstId(inst.id);
+      case "pay": {
+        // Validate account_id and payment_method
+        const hasAccount = !!inst.account_id;
+        const hasMethod = !!inst.payment_method;
+        if (!hasAccount || !hasMethod) {
+          setPaymentValidationInst(inst);
+          setPaymentValAccount(inst.account_id || "");
+          setPaymentValMethod(inst.payment_method || "");
+        } else {
+          setPaymentDate(todayISO());
+          setPaymentInstId(inst.id);
+        }
         break;
+      }
       case "reopen":
         handleReopen(inst.id);
         break;
@@ -421,6 +456,42 @@ export default function BillsPage() {
           </div>
         )}
       </div>
+
+      {/* Payment Validation Dialog (missing account/payment method) */}
+      <Dialog open={!!paymentValidationInst} onOpenChange={() => setPaymentValidationInst(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Campos obrigatórios</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Preencha os campos abaixo para informar o pagamento:</p>
+          <div className="space-y-3">
+            {!paymentValidationInst?.account_id && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Conta:</label>
+                <Select value={paymentValAccount} onValueChange={setPaymentValAccount}>
+                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    {banks.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {!paymentValidationInst?.payment_method && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Forma de Pagamento:</label>
+                <Select value={paymentValMethod} onValueChange={setPaymentValMethod}>
+                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentValidationInst(null)}>Cancelar</Button>
+            <Button onClick={handlePaymentValidationConfirm}>Informar Pagamento</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Payment Date Dialog */}
       <Dialog open={!!paymentInstId} onOpenChange={() => setPaymentInstId(null)}>
