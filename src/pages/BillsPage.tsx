@@ -209,16 +209,17 @@ export default function BillsPage() {
   const setPeriodPreset = (preset: "today" | "month" | "year") => {
     const today = todayISO();
     const d = new Date();
-    if (preset === "today") { setPeriodStart(today); setPeriodEnd(today); }
+    let s: string, e: string;
+    if (preset === "today") { s = today; e = today; }
     else if (preset === "month") {
-      const s = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-      const e = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
-      setPeriodStart(s); setPeriodEnd(e);
+      s = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+      e = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
     } else {
-      const s = `${d.getFullYear()}-01-01`;
-      const e = `${d.getFullYear()}-12-31`;
-      setPeriodStart(s); setPeriodEnd(e);
+      s = `${d.getFullYear()}-01-01`;
+      e = `${d.getFullYear()}-12-31`;
     }
+    setPeriodStart(s); setPeriodEnd(e);
+    setAppliedFilters(prev => ({ ...prev, periodStart: s, periodEnd: e }));
   };
 
   const toggleFilter = (key: FilterKey, value: string) => {
