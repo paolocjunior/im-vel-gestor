@@ -99,6 +99,16 @@ export default function BillFormPage() {
   const [lookingUpCnpj, setLookingUpCnpj] = useState(false);
   const [savingVendor, setSavingVendor] = useState(false);
 
+  // Add cost center dialog
+  const [addCCDialogOpen, setAddCCDialogOpen] = useState(false);
+  const [newCCName, setNewCCName] = useState("");
+  const [savingCC, setSavingCC] = useState(false);
+
+  // Add category dialog
+  const [addCatDialogOpen, setAddCatDialogOpen] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [savingCat, setSavingCat] = useState(false);
+
   const effectiveBillId = (isNew || isClone) ? null : billId;
 
   const categoryOptions = useMemo(() => {
@@ -139,6 +149,33 @@ export default function BillFormPage() {
       categories: ((catData as any[]) || []).filter((cat: any) => cat.cost_center_id === cc.id).map((cat: any) => cat.name),
     }));
     setDbCostCenters(ccs);
+  };
+
+  const saveNewCostCenter = async () => {
+    if (!newCCName.trim()) { toast.error("Nome é obrigatório."); return; }
+    setSavingCC(true);
+    const { error } = await supabase.from("user_cost_centers").insert({ name: newCCName.trim(), user_id: user!.id });
+    setSavingCC(false);
+    if (error) { toast.error("Erro ao criar centro de custo."); return; }
+    await loadCostCenters();
+    setCostCenter(newCCName.trim());
+    setCategory("");
+    setAddCCDialogOpen(false);
+    toast.success("Centro de custo criado!");
+  };
+
+  const saveNewCategory = async () => {
+    if (!newCatName.trim()) { toast.error("Nome é obrigatório."); return; }
+    const cc = dbCostCenters.find(c => c.name === costCenter);
+    if (!cc) { toast.error("Centro de custo não encontrado."); return; }
+    setSavingCat(true);
+    const { error } = await supabase.from("user_categories").insert({ name: newCatName.trim(), cost_center_id: cc.id, user_id: user!.id });
+    setSavingCat(false);
+    if (error) { toast.error("Erro ao criar categoria."); return; }
+    await loadCostCenters();
+    setCategory(newCatName.trim());
+    setAddCatDialogOpen(false);
+    toast.success("Categoria criada!");
   };
 
   useEffect(() => {
@@ -705,19 +742,27 @@ export default function BillFormPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Centro de Custo:</Label>
-              <Select value={costCenter} onValueChange={v => { setCostCenter(v); setCategory(""); }} disabled={isView}>
+              <Select value={costCenter} onValueChange={v => {
+                if (v === "__add_cc") { setNewCCName(""); setAddCCDialogOpen(true); return; }
+                setCostCenter(v); setCategory("");
+              }} disabled={isView}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   {costCenterOptions.map(cc => <SelectItem key={cc} value={cc}>{cc}</SelectItem>)}
+                  <SelectItem value="__add_cc">+ Adicionar Centro de Custo</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Categoria:</Label>
-              <Select value={category} onValueChange={setCategory} disabled={isView || !costCenter}>
+              <Select value={category} onValueChange={v => {
+                if (v === "__add_cat") { setNewCatName(""); setAddCatDialogOpen(true); return; }
+                setCategory(v);
+              }} disabled={isView || !costCenter}>
                 <SelectTrigger><SelectValue placeholder={costCenter ? "Selecione..." : "Selecione o Centro de Custo primeiro"} /></SelectTrigger>
                 <SelectContent>
                   {categoryOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {costCenter && <SelectItem value="__add_cat">+ Adicionar Categoria</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
@@ -1018,6 +1063,37 @@ export default function BillFormPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setVendorDialogOpen(false)}>Cancelar</Button>
             <Button onClick={saveNewVendor} disabled={savingVendor}>{savingVendor ? "Salvando..." : "Salvar"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Cost Center Dialog */}
+      <Dialog open={addCCDialogOpen} onOpenChange={setAddCCDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Novo Centro de Custo</DialogTitle></DialogHeader>
+          <div className="space-y-1.5">
+            <Label>Nome *</Label>
+            <Input value={newCCName} onChange={e => setNewCCName(e.target.value)} placeholder="Ex: Obra, Marketing" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddCCDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={saveNewCostCenter} disabled={savingCC}>{savingCC ? "Salvando..." : "Salvar"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Category Dialog */}
+      <Dialog open={addCatDialogOpen} onOpenChange={setAddCatDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Nova Categoria</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Centro de Custo: <strong>{costCenter}</strong></p>
+          <div className="space-y-1.5">
+            <Label>Nome *</Label>
+            <Input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="Ex: Ferramentas, Pintura" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddCatDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={saveNewCategory} disabled={savingCat}>{savingCat ? "Salvando..." : "Salvar"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
