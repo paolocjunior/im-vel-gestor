@@ -105,46 +105,46 @@ const StudyDashboard = () => {
     <div className="min-h-screen bg-background">
       <GlobalTopbar />
 
-      {/* Project info */}
+      {/* Project info + alerts */}
       <div className="max-w-[1440px] mx-auto px-6 py-4 border-b bg-card">
-        <h1 className="text-2xl font-bold">{study?.name}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Status: <span className="text-foreground font-medium">{study?.status === "COMPLETE" ? "Completo" : "Rascunho"}</span>
-        </p>
-        <button onClick={() => navigate(`/studies/${id}/edit`)} className="text-sm text-primary hover:underline font-medium mt-0.5 flex items-center gap-1">
-          <Pencil className="h-3 w-3" /> Editar Dados
-        </button>
-      </div>
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">{study?.name}</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Status: <span className="text-foreground font-medium">{study?.status === "COMPLETE" ? "Completo" : "Rascunho"}</span>
+            </p>
+            <button onClick={() => navigate(`/studies/${id}/edit`)} className="text-sm text-primary hover:underline font-medium mt-0.5 flex items-center gap-1">
+              <Pencil className="h-3 w-3" /> Editar Dados
+            </button>
+          </div>
 
-      {/* Alerts banner - only visible when there are alerts */}
-      {overdueInstallments.length > 0 && (
-        <div className="max-w-[1440px] mx-auto px-6 pt-4">
-          <Alert variant="destructive" className="border-destructive/30 bg-destructive/5">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle className="text-sm font-semibold">
-              {overdueInstallments.length === 1
-                ? "1 vencimento atrasado"
-                : `${overdueInstallments.length} vencimentos atrasados`}
-            </AlertTitle>
-            <AlertDescription className="text-xs mt-1 space-y-0.5">
-              {overdueInstallments.slice(0, 5).map((inst) => (
-                <p key={inst.id}>
-                  <button
-                    className="text-destructive hover:underline font-medium"
-                    onClick={() => navigate(`/studies/${id}/bills`)}
-                  >
-                    {inst.description || "Parcela"} — {formatBRL(Number(inst.amount))} — venc. {formatDateBR(inst.due_date)}
-                  </button>
-                </p>
-              ))}
-              {overdueInstallments.length > 5 && (
-                <p className="text-muted-foreground">e mais {overdueInstallments.length - 5}…</p>
-              )}
-            </AlertDescription>
-          </Alert>
+          {overdueInstallments.length > 0 && (
+            <Alert variant="destructive" className="border-destructive/30 bg-destructive/5 md:max-w-lg">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle className="text-sm font-semibold">
+                {overdueInstallments.length === 1
+                  ? "1 vencimento atrasado"
+                  : `${overdueInstallments.length} vencimentos atrasados`}
+              </AlertTitle>
+              <AlertDescription className="text-xs mt-1 space-y-0.5">
+                {overdueInstallments.slice(0, 5).map((inst) => (
+                  <p key={inst.id}>
+                    <button
+                      className="text-destructive hover:underline font-medium"
+                      onClick={() => navigate(`/studies/${id}/bills`)}
+                    >
+                      {inst.description || "Parcela"} — {formatBRL(Number(inst.amount))} — venc. {formatDateBR(inst.due_date)}
+                    </button>
+                  </p>
+                ))}
+                {overdueInstallments.length > 5 && (
+                  <p className="text-muted-foreground">e mais {overdueInstallments.length - 5}…</p>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
-      )}
-
+      </div>
       <div className="max-w-[1440px] mx-auto px-6 py-6">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
 
