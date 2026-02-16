@@ -221,7 +221,7 @@ export default function ProvidersPage() {
         )}
 
         <Button variant="outline" size="sm" onClick={() => navigate(`/studies/${studyId}/dashboard`)}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar ao dashboard
+          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
         </Button>
       </div>
 
