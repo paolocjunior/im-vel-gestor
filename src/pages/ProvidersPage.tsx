@@ -155,9 +155,14 @@ export default function ProvidersPage() {
       <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
         <h1 className="text-xl font-bold">Prestador e Contratos</h1>
 
-        <Button size="sm" onClick={() => navigate(`/studies/${studyId}/providers/new`)}>
-          <Plus className="h-4 w-4 mr-1" /> Novo Prestador/Contratos
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => navigate(`/studies/${studyId}/providers/new`)}>
+            <Plus className="h-4 w-4 mr-1" /> Novo Prestador/Contratos
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => navigate(`/studies/${studyId}/dashboard`)}>
+            <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
+          </Button>
+        </div>
 
         {/* Filters */}
         {enrichedProviders.length > 0 && (
@@ -219,10 +224,6 @@ export default function ProvidersPage() {
             </Table>
           </div>
         )}
-
-        <Button variant="outline" size="sm" onClick={() => navigate(`/studies/${studyId}/dashboard`)}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
-        </Button>
       </div>
 
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
