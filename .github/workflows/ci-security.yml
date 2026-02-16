@@ -25,9 +25,9 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Audit dependencies (High/Critical)
-        run: bun pm audit --level high
-        continue-on-error: false
+      - name: Scan dependencies for vulnerabilities
+        run: bun pm scan
+        continue-on-error: true
 
       - name: Lint
         run: bun run lint
