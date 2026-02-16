@@ -1,0 +1,5 @@
+title = "Gitleaks config"
+
+[allowlist]
+  description = "Allow Supabase publishable (anon) key"
+  paths = [".env"]
