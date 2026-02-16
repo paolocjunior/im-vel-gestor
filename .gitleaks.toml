@@ -1,5 +1,11 @@
-title = "Gitleaks config"
+# .gitleaks.toml
+title = "Gitleaks config - ignore Supabase anon key false positive"
 
 [allowlist]
-  description = "Allow Supabase publishable (anon) key"
-  paths = [".env"]
+description = "Allow Supabase publishable/anon key (public by design) only"
+regexes = [
+  '''VITE_SUPABASE_PUBLISHABLE_KEY\s*=\s*"(?:eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+)"'''
+]
+paths = [
+  '''\.env$'''
+]
