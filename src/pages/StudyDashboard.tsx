@@ -24,7 +24,7 @@ const modules = [
   { key: "fornecedores", label: "Fornecedores", icon: Users, pathSuffix: "/vendors" },
   { key: "contratos", label: "Prestador/Contratos", icon: FileText, pathSuffix: "/providers" },
   { key: "folha", label: "Folha", icon: Wallet },
-  { key: "obras", label: "Obras/Construção", icon: HardHat },
+  { key: "obras", label: "Obras/Construção", icon: HardHat, pathSuffix: "/construction" },
 ];
 
 function getStepStatus(inputs: any, step: "a" | "b" | "c" | "d" | "e"): StageStatus {
