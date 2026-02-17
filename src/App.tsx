@@ -23,6 +23,7 @@ import SettingsPage from "./pages/SettingsPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import BillsPage from "./pages/BillsPage";
 import BillFormPage from "./pages/BillFormPage";
+import ConstructionPage from "./pages/ConstructionPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,6 +59,7 @@ const App = () => (
             <Route path="/studies/:id/providers/new" element={<P><ProviderFormPage /></P>} />
             <Route path="/studies/:id/providers/:providerId/edit" element={<P><ProviderFormPage /></P>} />
             <Route path="/studies/:id/providers/:providerId/view" element={<P><ProviderDetailPage /></P>} />
+            <Route path="/studies/:id/construction" element={<P><ConstructionPage /></P>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
