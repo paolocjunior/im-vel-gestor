@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import GlobalTopbar from "@/components/GlobalTopbar";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { ChevronDown, ChevronRight, LayoutDashboard, Layers, Calculator, ShoppingCart, Package, Wallet, FileBarChart } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import ConstructionDashboard from "@/components/construction/ConstructionDashboard";
 import ConstructionStages from "@/components/construction/ConstructionStages";
@@ -26,6 +27,8 @@ export default function ConstructionPage() {
   const [stageTree, setStageTree] = useState<StageTreeNode[]>([]);
   const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
   const [studyName, setStudyName] = useState("");
+  const [incompleteStageNames, setIncompleteStageNames] = useState<string[]>([]);
+  const [pendingView, setPendingView] = useState<ViewType | null>(null);
 
   const fetchStudy = useCallback(async () => {
     if (!studyId) return;
@@ -82,6 +85,14 @@ export default function ConstructionPage() {
     });
   };
 
+  const handleViewChange = (view: ViewType) => {
+    if (activeView === "stages" && view !== "stages" && incompleteStageNames.length > 0) {
+      setPendingView(view);
+      return;
+    }
+    setActiveView(view);
+  };
+
   const menuItems: { key: ViewType; label: string; icon: React.ElementType }[] = [
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { key: "stages", label: "Etapas", icon: Layers },
@@ -122,7 +133,13 @@ export default function ConstructionPage() {
       case "dashboard":
         return <ConstructionDashboard studyId={studyId} stageTree={stageTree} onNavigateStages={() => setActiveView("stages")} />;
       case "stages":
-        return <ConstructionStages studyId={studyId} onStagesChanged={fetchStageTree} />;
+        return (
+          <ConstructionStages
+            studyId={studyId}
+            onStagesChanged={fetchStageTree}
+            onIncompleteStagesChange={setIncompleteStageNames}
+          />
+        );
       default:
         return (
           <div className="flex items-center justify-center h-64">
@@ -160,26 +177,35 @@ export default function ConstructionPage() {
                 <nav className="space-y-0.5">
                   {menuItems.map((item) => (
                     <div key={item.key}>
-                      <button
+                      <div
                         className={cn(
                           "flex items-center gap-2 w-full text-left py-2 px-2 rounded-lg text-sm font-medium transition-colors",
                           activeView === item.key
                             ? "bg-primary/10 text-primary"
                             : "text-foreground hover:bg-muted/50"
                         )}
-                        onClick={() => {
-                          setActiveView(item.key);
-                          if (item.key === "stages") setStagesExpanded(!stagesExpanded);
-                        }}
                       >
-                        <item.icon className="h-4 w-4 shrink-0" />
-                        <span className="truncate">{item.label}</span>
+                        <button
+                          className="flex items-center gap-2 flex-1 min-w-0"
+                          onClick={() => handleViewChange(item.key)}
+                        >
+                          <item.icon className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{item.label}</span>
+                        </button>
                         {item.key === "stages" && (
-                          stagesExpanded
-                            ? <ChevronDown className="h-3 w-3 ml-auto shrink-0 text-muted-foreground" />
-                            : <ChevronRight className="h-3 w-3 ml-auto shrink-0 text-muted-foreground" />
+                          <button
+                            className="shrink-0 p-0.5 rounded hover:bg-muted/80"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setStagesExpanded(!stagesExpanded);
+                            }}
+                          >
+                            {stagesExpanded
+                              ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                              : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                          </button>
                         )}
-                      </button>
+                      </div>
                       {/* Stage tree under Etapas */}
                       {item.key === "stages" && stagesExpanded && (
                         <div className="mt-1 mb-1">
@@ -209,6 +235,30 @@ export default function ConstructionPage() {
           </ResizablePanelGroup>
         </div>
       </div>
+
+      {/* Incomplete stages warning */}
+      <AlertDialog open={!!pendingView} onOpenChange={() => setPendingView(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Etapas incompletas</AlertDialogTitle>
+            <AlertDialogDescription>
+              As seguintes etapas/sub-etapas ainda não foram preenchidas (quantidade e valor unitário):
+              <br />
+              <span className="font-medium text-foreground">
+                {incompleteStageNames.join(', ')}
+              </span>
+              <br />
+              Deseja continuar sem preencher?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setActiveView(pendingView!); setPendingView(null); }}>
+              Continuar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
