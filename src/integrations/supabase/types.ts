@@ -166,6 +166,187 @@ export type Database = {
           },
         ]
       }
+      construction_stage_catalog: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          is_active: boolean
+          is_system: boolean
+          level: number
+          name: string
+          parent_id: string | null
+          position: number
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          level?: number
+          name: string
+          parent_id?: string | null
+          position?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          level?: number
+          name?: string
+          parent_id?: string | null
+          position?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "construction_stage_catalog_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "construction_stage_catalog"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      construction_stages: {
+        Row: {
+          area_m2: number
+          catalog_id: string | null
+          code: string
+          created_at: string
+          end_date: string | null
+          id: string
+          is_deleted: boolean
+          level: number
+          name: string
+          parent_id: string | null
+          position: number
+          quantity: number
+          start_date: string | null
+          status: string
+          study_id: string
+          total_value: number
+          unit_id: string | null
+          unit_price: number
+          updated_at: string
+        }
+        Insert: {
+          area_m2?: number
+          catalog_id?: string | null
+          code: string
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          is_deleted?: boolean
+          level?: number
+          name: string
+          parent_id?: string | null
+          position?: number
+          quantity?: number
+          start_date?: string | null
+          status?: string
+          study_id: string
+          total_value?: number
+          unit_id?: string | null
+          unit_price?: number
+          updated_at?: string
+        }
+        Update: {
+          area_m2?: number
+          catalog_id?: string | null
+          code?: string
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          is_deleted?: boolean
+          level?: number
+          name?: string
+          parent_id?: string | null
+          position?: number
+          quantity?: number
+          start_date?: string | null
+          status?: string
+          study_id?: string
+          total_value?: number
+          unit_id?: string | null
+          unit_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "construction_stages_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "construction_stage_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "construction_stages_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "construction_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "construction_stages_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "construction_stages_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "construction_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      construction_units: {
+        Row: {
+          abbreviation: string
+          created_at: string
+          has_decimals: boolean
+          id: string
+          is_active: boolean
+          is_system: boolean
+          name: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          abbreviation: string
+          created_at?: string
+          has_decimals?: boolean
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          name: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          abbreviation?: string
+          created_at?: string
+          has_decimals?: boolean
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          name?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           created_at: string
