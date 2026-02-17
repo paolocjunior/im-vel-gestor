@@ -36,6 +36,8 @@ export default function ConstructionDashboard({ studyId, stageTree, onNavigateSt
     valorM2: 0,
   });
 
+  const isDark = document.documentElement.classList.contains("dark");
+
   const fetchKpis = useCallback(async () => {
     const { data: stages } = await supabase
       .from("construction_stages" as any)
@@ -85,23 +87,27 @@ export default function ConstructionDashboard({ studyId, stageTree, onNavigateSt
     { label: "Total Geral", value: `R$ ${fmt(kpi.totalGeral)}`, icon: Layers },
   ];
 
+  const summaryBg = isDark ? 'hsl(180, 28%, 12%)' : 'hsl(180, 28%, 88%)';
+
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-foreground">Dashboard</h2>
 
       {/* KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {kpiCards.map((card) => (
-          <div key={card.label} className="card-dashboard space-y-2">
+          <div 
+            key={card.label} 
+            className="rounded-xl p-3 space-y-1.5"
+            style={{ backgroundColor: summaryBg }}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide leading-tight">
                 {card.label}
               </span>
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                <card.icon className="h-4 w-4 text-primary" />
-              </div>
+              <card.icon className="h-3.5 w-3.5 text-primary shrink-0" />
             </div>
-            <p className="kpi-value">{card.value}</p>
+            <p className="text-sm font-bold text-foreground leading-tight">{card.value}</p>
           </div>
         ))}
       </div>

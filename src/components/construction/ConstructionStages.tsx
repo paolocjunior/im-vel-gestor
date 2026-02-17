@@ -51,6 +51,23 @@ interface Props {
   onStagesChanged: () => void;
 }
 
+/** Generate a procedural HSL color for a stage based on its root index using Golden Ratio */
+function getStageColor(rootIndex: number, isSubStage: boolean): string {
+  const goldenAngle = 137.508;
+  const hue = (rootIndex * goldenAngle) % 360;
+  const saturation = 28; // 22-38 range, center
+  const lightness = isSubStage ? 92 : 86; // sub-stages +6%
+  return `hsl(${Math.round(hue)}, ${saturation}%, ${lightness}%)`;
+}
+
+function getStageColorDark(rootIndex: number, isSubStage: boolean): string {
+  const goldenAngle = 137.508;
+  const hue = (rootIndex * goldenAngle) % 360;
+  const saturation = 25;
+  const lightness = isSubStage ? 18 : 14;
+  return `hsl(${Math.round(hue)}, ${saturation}%, ${lightness}%)`;
+}
+
 export default function ConstructionStages({ studyId, onStagesChanged }: Props) {
   const { user } = useAuth();
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
@@ -63,6 +80,8 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
   const [deleteTarget, setDeleteTarget] = useState<StageRow | null>(null);
   const [newCatalogName, setNewCatalogName] = useState("");
   const [showNewCatalog, setShowNewCatalog] = useState(false);
+  const [dataLossTarget, setDataLossTarget] = useState<StageRow | null>(null);
+  const isDark = document.documentElement.classList.contains("dark");
 
   const fetchCatalog = useCallback(async () => {
     const { data } = await supabase
@@ -101,12 +120,9 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
   // Compute totals
   const rootStages = stages.filter((s) => !s.parent_id);
   const totalValue = stages.reduce((sum, s) => {
-    // Only count leaf stages (no children) to avoid double counting
     const hasChildren = stages.some((c) => c.parent_id === s.id);
     return sum + (hasChildren ? 0 : Number(s.total_value) || 0);
   }, 0);
-  const totalM2 = stages.reduce((sum, s) => sum + (Number(s.area_m2) || 0), 0);
-  const valorM2 = totalM2 > 0 ? totalValue / totalM2 : 0;
 
   // Period
   const allDates = stages
@@ -130,22 +146,68 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
     });
   };
 
-  // Get available catalog items for adding a macro stage (level 0 catalog items)
   const macroOptions = catalog.filter((c) => c.level === 0);
 
-  // Get catalog children for sub-stages
   const getCatalogChildren = (parentCatalogId: string) =>
     catalog.filter((c) => c.parent_id === parentCatalogId);
+
+  // Get already used catalog IDs to prevent duplicates
+  const usedCatalogIds = new Set(stages.filter(s => s.catalog_id).map(s => s.catalog_id));
+
+  // Find the root ancestor index of a stage (for color assignment)
+  const getRootIndex = (stage: StageRow): number => {
+    if (!stage.parent_id) {
+      return rootStages.indexOf(stage);
+    }
+    let current = stage;
+    while (current.parent_id) {
+      const parent = stages.find(s => s.id === current.parent_id);
+      if (!parent) break;
+      current = parent;
+    }
+    return rootStages.indexOf(current);
+  };
+
+  const handleAddSubStageClick = (parentStage: StageRow) => {
+    // Check if parent has data filled
+    const hasData = parentStage.unit_id || parentStage.quantity > 0 || parentStage.unit_price > 0;
+    if (hasData) {
+      setDataLossTarget(parentStage);
+    } else {
+      setAddParentId(parentStage.id);
+      setAddDialogOpen(true);
+    }
+  };
+
+  const confirmDataLossAndAdd = async () => {
+    if (!dataLossTarget) return;
+    // Clear the parent's data
+    await supabase
+      .from("construction_stages" as any)
+      .update({ unit_id: null, quantity: 0, unit_price: 0, total_value: 0, area_m2: 0 })
+      .eq("id", dataLossTarget.id);
+
+    setAddParentId(dataLossTarget.id);
+    setDataLossTarget(null);
+    setAddDialogOpen(true);
+    fetchStages();
+    onStagesChanged();
+  };
 
   const handleAddStage = async () => {
     if (!selectedCatalogId && !newCatalogName) return;
 
     let catalogItem: CatalogItem | undefined;
-    let newCode = "";
     let newName = "";
 
     if (showNewCatalog && newCatalogName) {
-      // Create new catalog entry
+      // Check duplicate name
+      const existing = catalog.find(c => c.name.toLowerCase() === newCatalogName.toLowerCase());
+      if (existing) {
+        toast.error("Já existe uma etapa com este nome");
+        return;
+      }
+
       const position = macroOptions.length + 1;
       const code = `${position}.0`;
       const { data, error } = await supabase
@@ -167,22 +229,31 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
         return;
       }
 
-      newCode = code;
       newName = newCatalogName;
       catalogItem = data as any;
       fetchCatalog();
     } else {
       catalogItem = catalog.find((c) => c.id === selectedCatalogId);
       if (!catalogItem) return;
-      newCode = catalogItem.code;
       newName = catalogItem.name;
+
+      // Check duplicate: same catalog_id + same parent
+      const duplicate = stages.find(s => s.catalog_id === catalogItem!.id && s.parent_id === addParentId);
+      if (duplicate) {
+        toast.error("Esta etapa já foi adicionada");
+        return;
+      }
     }
 
-    // Determine position and code for the new stage
+    // Determine position and code based on PARENT's code, not global count
     const siblings = stages.filter((s) => s.parent_id === addParentId);
     const position = siblings.length + 1;
     const parentStage = addParentId ? stages.find((s) => s.id === addParentId) : null;
-    const stageCode = parentStage ? `${parentStage.code}.${position}` : `${position}`;
+    
+    // Code: if parent exists, use parent.code + next child number. Otherwise use root position
+    const stageCode = parentStage 
+      ? `${parentStage.code}.${position}` 
+      : `${position}`;
 
     const { error } = await supabase.from("construction_stages" as any).insert({
       study_id: studyId,
@@ -204,12 +275,42 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
     setSelectedCatalogId("");
     setNewCatalogName("");
     setShowNewCatalog(false);
+    
+    // Auto-expand the newly created stage (if macro) and its parent
+    if (addParentId) {
+      setExpanded(prev => new Set([...prev, addParentId!]));
+    }
+    
+    // Fetch stages and then auto-expand the new stage
+    const { data: newStages } = await supabase
+      .from("construction_stages" as any)
+      .select("id, parent_id, code")
+      .eq("study_id", studyId)
+      .eq("is_deleted", false)
+      .order("position");
+    
+    if (newStages) {
+      // Find the newly created stage and expand it
+      const newStage = (newStages as any[]).find(s => s.code === stageCode && s.parent_id === addParentId);
+      if (newStage) {
+        setExpanded(prev => new Set([...prev, newStage.id]));
+      }
+    }
+
     fetchStages();
     onStagesChanged();
   };
 
   const handleDeleteStage = async () => {
     if (!deleteTarget) return;
+    // Also soft-delete children
+    const childIds = stages.filter(s => s.parent_id === deleteTarget.id).map(s => s.id);
+    if (childIds.length > 0) {
+      await supabase
+        .from("construction_stages" as any)
+        .update({ is_deleted: true })
+        .in("id", childIds);
+    }
     await supabase
       .from("construction_stages" as any)
       .update({ is_deleted: true })
@@ -246,22 +347,28 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
     const isExpanded = expanded.has(stage.id);
     const isLeaf = !hasChildren;
     const unit = units.find((u) => u.id === stage.unit_id);
+    const rootIdx = getRootIndex(stage);
+    const isSubStage = depth > 0;
+    const bgColor = isDark ? getStageColorDark(rootIdx, isSubStage) : getStageColor(rootIdx, isSubStage);
 
     return (
       <div key={stage.id}>
         <div
           className={cn(
-            "flex items-center gap-2 py-2 px-2 border-b border-border/50 hover:bg-muted/30 transition-colors",
-            depth === 0 && "bg-muted/20 font-semibold"
+            "flex items-center gap-2 py-2 px-2 border-b border-border/50 hover:brightness-95 transition-all",
+            depth === 0 && "font-semibold"
           )}
-          style={{ paddingLeft: `${depth * 20 + 8}px` }}
+          style={{ 
+            paddingLeft: `${depth * 20 + 8}px`,
+            backgroundColor: bgColor,
+          }}
         >
           {/* Expand toggle */}
           <button
             className="shrink-0"
             onClick={() => toggleExpand(stage.id)}
           >
-            {hasChildren ? (
+            {hasChildren || isExpanded ? (
               isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />
             ) : (
               <ChevronRight className="h-4 w-4 text-muted-foreground/30" />
@@ -273,15 +380,14 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
             {stage.code} - {stage.name}
           </span>
 
-          {/* Editable fields for leaf items */}
+          {/* Editable fields for leaf items only when not expanded for sub-stages */}
           {isLeaf ? (
             <div className="flex items-center gap-2 ml-auto">
-              {/* Unit */}
               <Select
                 value={stage.unit_id || ""}
                 onValueChange={(v) => handleFieldChange(stage.id, "unit_id", v)}
               >
-                <SelectTrigger className="w-20 h-8 text-xs">
+                <SelectTrigger className="w-20 h-8 text-xs bg-background/80">
                   <SelectValue placeholder="Un." />
                 </SelectTrigger>
                 <SelectContent>
@@ -293,29 +399,25 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
                 </SelectContent>
               </Select>
 
-              {/* Quantity */}
               <MaskedNumberInput
-                className="w-20 h-8 text-xs text-right"
+                className="w-20 h-8 text-xs text-right bg-background/80"
                 value={stage.quantity}
                 onValueChange={(v) => handleFieldChange(stage.id, "quantity", v)}
                 decimals={unit?.has_decimals ? 2 : 0}
                 placeholder="Qtde."
               />
 
-              {/* Unit Price */}
               <MaskedNumberInput
-                className="w-28 h-8 text-xs text-right"
+                className="w-28 h-8 text-xs text-right bg-background/80"
                 value={stage.unit_price}
                 onValueChange={(v) => handleFieldChange(stage.id, "unit_price", v)}
                 placeholder="Valor Unit."
               />
 
-              {/* Total */}
               <div className="w-28 h-8 flex items-center justify-end text-xs font-medium text-foreground">
                 {formatBRNumber(stage.total_value)}
               </div>
 
-              {/* Delete */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -332,6 +434,14 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
                   children.reduce((sum, c) => sum + (Number(c.total_value) || 0), 0)
                 )}
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                onClick={() => setDeleteTarget(stage)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
             </div>
           )}
         </div>
@@ -342,12 +452,9 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
         {/* Add sub-stage button */}
         {isExpanded && (
           <button
-            className="flex items-center gap-1 text-xs text-primary hover:text-primary-hover py-1 transition-colors"
+            className="flex items-center gap-1 text-xs text-primary hover:text-primary-hover py-1.5 transition-colors"
             style={{ paddingLeft: `${(depth + 1) * 20 + 28}px` }}
-            onClick={() => {
-              setAddParentId(stage.id);
-              setAddDialogOpen(true);
-            }}
+            onClick={() => handleAddSubStageClick(stage)}
           >
             <Plus className="h-3 w-3" /> Adicionar sub-etapa
           </button>
@@ -356,30 +463,34 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
     );
   }
 
+  // Filter available options excluding already used
+  const getAvailableOptions = () => {
+    if (addParentId) {
+      const parentStage = stages.find(s => s.id === addParentId);
+      const options = parentStage?.catalog_id
+        ? getCatalogChildren(parentStage.catalog_id)
+        : macroOptions;
+      return options.filter(c => !usedCatalogIds.has(c.id) || !stages.some(s => s.catalog_id === c.id && s.parent_id === addParentId));
+    }
+    return macroOptions.filter(c => !usedCatalogIds.has(c.id) || !stages.some(s => s.catalog_id === c.id && s.parent_id === null));
+  };
+
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-foreground">Etapas</h2>
 
-      {/* Summary */}
-      <div className="card-dashboard space-y-4">
+      {/* Summary - only Período and Valor Total */}
+      <div className="rounded-xl p-5" style={{ backgroundColor: isDark ? 'hsl(180, 28%, 12%)' : 'hsl(180, 28%, 88%)' }}>
         {minDate && maxDate && (
-          <div className="text-center">
+          <div className="text-center mb-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Período</p>
             <p className="text-sm font-semibold text-foreground">
               {formatDate(minDate)} à {formatDate(maxDate)}
             </p>
           </div>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="text-center">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Valor m²</p>
-            <p className="kpi-value text-lg">R$ {formatBRNumber(valorM2)}</p>
-          </div>
-          <div className="text-center">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Total m²</p>
-            <p className="kpi-value text-lg">{formatBRNumber(totalM2)} m²</p>
-          </div>
-          <div className="text-center">
+        <div className="flex justify-end">
+          <div className="text-right">
             <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Valor Total</p>
             <p className="kpi-value text-lg">R$ {formatBRNumber(totalValue)}</p>
           </div>
@@ -434,15 +545,7 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
                       <SelectValue placeholder="Escolha uma etapa..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {(addParentId
-                        ? (() => {
-                            const parentStage = stages.find(s => s.id === addParentId);
-                            return parentStage?.catalog_id
-                              ? getCatalogChildren(parentStage.catalog_id)
-                              : macroOptions;
-                          })()
-                        : macroOptions
-                      ).map((c) => (
+                      {getAvailableOptions().map((c) => (
                         <SelectItem key={c.id} value={c.id} className="text-sm">
                           {c.code} - {c.name}
                         </SelectItem>
@@ -503,13 +606,34 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
             <AlertDialogTitle>Excluir etapa?</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir "{deleteTarget?.code} - {deleteTarget?.name}"?
-              Esta ação não pode ser desfeita.
+              {stages.some(s => s.parent_id === deleteTarget?.id) && " Todas as sub-etapas também serão excluídas."}
+              {" "}Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteStage} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Data Loss Warning */}
+      <AlertDialog open={!!dataLossTarget} onOpenChange={() => setDataLossTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dados serão perdidos</AlertDialogTitle>
+            <AlertDialogDescription>
+              A etapa "{dataLossTarget?.code} - {dataLossTarget?.name}" já possui dados preenchidos (unidade, quantidade ou valor).
+              Ao adicionar uma sub-etapa, estes dados serão excluídos e apenas os valores das sub-etapas serão considerados.
+              Deseja continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDataLossAndAdd}>
+              Continuar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
