@@ -49,6 +49,7 @@ interface StageRow {
 interface Props {
   studyId: string;
   onStagesChanged: () => void;
+  onIncompleteStagesChange?: (incompleteNames: string[]) => void;
 }
 
 /** Generate a procedural HSL color for a stage based on its root index using Golden Ratio */
@@ -68,7 +69,7 @@ function getStageColorDark(rootIndex: number, isSubStage: boolean): string {
   return `hsl(${Math.round(hue)}, ${saturation}%, ${lightness}%)`;
 }
 
-export default function ConstructionStages({ studyId, onStagesChanged }: Props) {
+export default function ConstructionStages({ studyId, onStagesChanged, onIncompleteStagesChange }: Props) {
   const { user } = useAuth();
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [units, setUnits] = useState<UnitItem[]>([]);
@@ -116,6 +117,17 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
     fetchUnits();
     fetchStages();
   }, [fetchCatalog, fetchUnits, fetchStages]);
+
+  // Detect incomplete leaf stages (created but qty and unit_price not filled)
+  useEffect(() => {
+    if (onIncompleteStagesChange) {
+      const incompleteLeaves = stages.filter(s => {
+        const hasChildren = stages.some(c => c.parent_id === s.id);
+        return !hasChildren && s.quantity === 0 && s.unit_price === 0;
+      });
+      onIncompleteStagesChange(incompleteLeaves.map(s => `${s.code} - ${s.name}`));
+    }
+  }, [stages, onIncompleteStagesChange]);
 
   // Compute totals
   const rootStages = stages.filter((s) => !s.parent_id);
@@ -208,17 +220,33 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
         return;
       }
 
-      const position = macroOptions.length + 1;
-      const code = `${position}.0`;
+      let catalogCode: string;
+      let catalogPosition: number;
+      if (addParentId) {
+        const pStage = stages.find(s => s.id === addParentId);
+        const pCatalogId = pStage?.catalog_id;
+        const existingSubs = pCatalogId ? getCatalogChildren(pCatalogId) : [];
+        const maxSubNum = existingSubs.reduce((max, c) => {
+          const parts = c.code.split('.');
+          return Math.max(max, parseInt(parts[parts.length - 1], 10) || 0);
+        }, 0);
+        const parentCodePrefix = pStage?.code?.split('.')[0] || '0';
+        catalogCode = `${parentCodePrefix}.${maxSubNum + 1}`;
+        catalogPosition = existingSubs.length + 1;
+      } else {
+        const maxMacroNum = macroOptions.reduce((max, c) => Math.max(max, parseInt(c.code, 10) || 0), 0);
+        catalogCode = `${maxMacroNum + 1}`;
+        catalogPosition = macroOptions.length + 1;
+      }
       const { data, error } = await supabase
         .from("construction_stage_catalog" as any)
         .insert({
           user_id: user?.id,
           parent_id: addParentId ? stages.find(s => s.id === addParentId)?.catalog_id : null,
-          code,
+          code: catalogCode,
           name: newCatalogName,
           level: addParentId ? 1 : 0,
-          position,
+          position: catalogPosition,
           is_system: false,
         })
         .select()
@@ -250,10 +278,18 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
     const position = siblings.length + 1;
     const parentStage = addParentId ? stages.find((s) => s.id === addParentId) : null;
     
-    // Code: if parent exists, use parent.code + next child number. Otherwise use root position
+    // Extract max numeric suffix from siblings to avoid numbering gaps
+    const getLastCodeNum = (c: string) => {
+      const parts = c.split('.');
+      return parseInt(parts[parts.length - 1], 10) || 0;
+    };
+    const maxNum = siblings.length > 0 
+      ? Math.max(...siblings.map(s => getLastCodeNum(s.code)))
+      : 0;
+    const nextNum = maxNum + 1;
     const stageCode = parentStage 
-      ? `${parentStage.code}.${position}` 
-      : `${position}`;
+      ? `${parentStage.code}.${nextNum}` 
+      : `${nextNum}`;
 
     const { error } = await supabase.from("construction_stages" as any).insert({
       study_id: studyId,
@@ -400,18 +436,32 @@ export default function ConstructionStages({ studyId, onStagesChanged }: Props) 
               </Select>
 
               <MaskedNumberInput
+                id={`qty-${stage.id}`}
                 className="w-20 h-8 text-xs text-right bg-background/80"
                 value={stage.quantity}
                 onValueChange={(v) => handleFieldChange(stage.id, "quantity", v)}
                 decimals={unit?.has_decimals ? 2 : 0}
                 placeholder="Qtde."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    document.getElementById(`price-${stage.id}`)?.focus();
+                  }
+                }}
               />
 
               <MaskedNumberInput
+                id={`price-${stage.id}`}
                 className="w-28 h-8 text-xs text-right bg-background/80"
                 value={stage.unit_price}
                 onValueChange={(v) => handleFieldChange(stage.id, "unit_price", v)}
                 placeholder="Valor Unit."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
               />
 
               <div className="w-28 h-8 flex items-center justify-end text-xs font-medium text-foreground">
