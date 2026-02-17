@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Key, Plus, Trash2, ChevronDown, ChevronRight, Sun, Moon } from "lucide-react";
+import { ArrowLeft, Key, Plus, Trash2, ChevronDown, ChevronRight, Sun, Moon, Pencil } from "lucide-react";
 import GlobalTopbar from "@/components/GlobalTopbar";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -62,15 +62,17 @@ export default function SettingsPage() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [savingInst, setSavingInst] = useState(false);
 
-  // Cost centers & categories
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [newCCName, setNewCCName] = useState("");
   const [newCatNames, setNewCatNames] = useState<Record<string, string>>({});
 
-  // Stage catalog
   const [catalogStages, setCatalogStages] = useState<CatalogStage[]>([]);
   const [newStageName, setNewStageName] = useState("");
   const [newSubStageNames, setNewSubStageNames] = useState<Record<string, string>>({});
+
+  // Inline editing state
+  const [editingStageId, setEditingStageId] = useState<string | null>(null);
+  const [editingStageName, setEditingStageName] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -143,13 +145,10 @@ export default function SettingsPage() {
 
   const saveSettings = async () => {
     setSavingSettings(true);
-    const { error } = await supabase
-      .from("user_settings")
-      .update({
-        roi_viable_threshold: settings.roi_viable_threshold,
-        roi_attention_threshold: settings.roi_attention_threshold,
-      })
-      .eq("user_id", user!.id);
+    const { error } = await supabase.from("user_settings").update({
+      roi_viable_threshold: settings.roi_viable_threshold,
+      roi_attention_threshold: settings.roi_attention_threshold,
+    }).eq("user_id", user!.id);
     setSavingSettings(false);
     if (error) { toast.error("Erro ao salvar configurações."); return; }
     toast.success("Configurações salvas!");
@@ -159,10 +158,7 @@ export default function SettingsPage() {
     if (!newInst.name.trim()) { toast.error("Nome é obrigatório."); return; }
     setSavingInst(true);
     const { error } = await supabase.from("financial_institutions").insert({
-      user_id: user!.id,
-      name: newInst.name.trim(),
-      institution_type: newInst.institution_type,
-      notes: newInst.notes.trim() || null,
+      user_id: user!.id, name: newInst.name.trim(), institution_type: newInst.institution_type, notes: newInst.notes.trim() || null,
     });
     setSavingInst(false);
     if (error) { toast.error("Erro ao adicionar."); return; }
@@ -194,11 +190,7 @@ export default function SettingsPage() {
   const addCategory = async (costCenterId: string) => {
     const name = newCatNames[costCenterId]?.trim();
     if (!name) { toast.error("Nome é obrigatório."); return; }
-    await supabase.from("user_categories" as any).insert({
-      user_id: user!.id,
-      cost_center_id: costCenterId,
-      name,
-    } as any);
+    await supabase.from("user_categories" as any).insert({ user_id: user!.id, cost_center_id: costCenterId, name } as any);
     setNewCatNames(prev => ({ ...prev, [costCenterId]: "" }));
     toast.success("Categoria adicionada!");
     loadCostCenters();
@@ -225,7 +217,6 @@ export default function SettingsPage() {
     if (!allCatalog) return;
 
     const items = allCatalog as any[];
-    // Show system items + user's own items
     const visible = items.filter(c => c.user_id === null || c.user_id === user!.id);
     const macros = visible.filter(c => c.level === 0);
     const subs = visible.filter(c => c.level === 1);
@@ -236,10 +227,7 @@ export default function SettingsPage() {
       code: m.code,
       is_system: m.is_system,
       subStages: subs.filter(s => s.parent_id === m.id).map((s: any) => ({
-        id: s.id,
-        name: s.name,
-        code: s.code,
-        is_system: s.is_system,
+        id: s.id, name: s.name, code: s.code, is_system: s.is_system,
       })),
       expanded: false,
     }));
@@ -249,10 +237,8 @@ export default function SettingsPage() {
 
   const addCatalogStage = async () => {
     if (!newStageName.trim()) { toast.error("Nome é obrigatório."); return; }
-    // Check duplicate
     if (catalogStages.some(s => s.name.toLowerCase() === newStageName.trim().toLowerCase())) {
-      toast.error("Já existe uma etapa com este nome.");
-      return;
+      toast.error("Já existe uma etapa com este nome."); return;
     }
     const maxCode = catalogStages.reduce((max, s) => Math.max(max, parseInt(s.code, 10) || 0), 0);
     await supabase.from("construction_stage_catalog" as any).insert({
@@ -270,7 +256,6 @@ export default function SettingsPage() {
 
   const removeCatalogStage = async (id: string) => {
     await supabase.from("construction_stage_catalog" as any).update({ is_active: false } as any).eq("id", id);
-    // Also deactivate sub-stages
     await supabase.from("construction_stage_catalog" as any).update({ is_active: false } as any).eq("parent_id", id);
     toast.success("Etapa removida do catálogo.");
     loadCatalogStages();
@@ -281,10 +266,8 @@ export default function SettingsPage() {
     if (!name) { toast.error("Nome é obrigatório."); return; }
     const parent = catalogStages.find(s => s.id === parentId);
     if (!parent) return;
-    // Check duplicate
     if (parent.subStages.some(s => s.name.toLowerCase() === name.toLowerCase())) {
-      toast.error("Já existe uma sub-etapa com este nome.");
-      return;
+      toast.error("Já existe uma sub-etapa com este nome."); return;
     }
     const maxSubNum = parent.subStages.reduce((max, s) => {
       const parts = s.code.split('.');
@@ -307,6 +290,15 @@ export default function SettingsPage() {
   const removeCatalogSubStage = async (id: string) => {
     await supabase.from("construction_stage_catalog" as any).update({ is_active: false } as any).eq("id", id);
     toast.success("Sub-etapa removida do catálogo.");
+    loadCatalogStages();
+  };
+
+  const renameCatalogItem = async (id: string, newName: string) => {
+    if (!newName.trim()) { toast.error("Nome é obrigatório."); return; }
+    await supabase.from("construction_stage_catalog" as any).update({ name: newName.trim() } as any).eq("id", id);
+    toast.success("Nome atualizado!");
+    setEditingStageId(null);
+    setEditingStageName("");
     loadCatalogStages();
   };
 
@@ -357,7 +349,6 @@ export default function SettingsPage() {
               </Button>
             </div>
 
-            {/* Institutions */}
             <div className="card-dashboard space-y-3">
               <h2 className="font-bold text-base">Instituições Financeiras</h2>
               <div className="space-y-2">
@@ -372,8 +363,7 @@ export default function SettingsPage() {
                     </SelectContent>
                   </Select>
                   <Button onClick={addInstitution} disabled={savingInst} size="sm" className="h-8 shrink-0">
-                    <Plus className="h-3 w-3 mr-1" />
-                    Adicionar
+                    <Plus className="h-3 w-3 mr-1" /> Adicionar
                   </Button>
                 </div>
               </div>
@@ -461,7 +451,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Column 3: Stage Catalog */}
+          {/* Column 3: Stage Catalog - ALL items editable & deletable */}
           <div>
             <div className="card-dashboard space-y-4">
               <div>
@@ -487,25 +477,58 @@ export default function SettingsPage() {
                   <div key={stage.id} className="border rounded-lg">
                     <div className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50" onClick={() => toggleCatalogExpand(stage.id)}>
                       {stage.expanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-                      <span className="font-semibold text-sm flex-1 truncate">{stage.code} - {stage.name}</span>
-                      <span className="text-xs text-muted-foreground mr-2">{stage.subStages.length} sub.</span>
-                      {!stage.is_system && (
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={e => { e.stopPropagation(); removeCatalogStage(stage.id); }}>
-                          <Trash2 className="h-3 w-3 text-destructive" />
-                        </Button>
+                      {editingStageId === stage.id ? (
+                        <Input
+                          value={editingStageName}
+                          onChange={e => setEditingStageName(e.target.value)}
+                          className="h-6 text-sm flex-1"
+                          autoFocus
+                          onClick={e => e.stopPropagation()}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") renameCatalogItem(stage.id, editingStageName);
+                            if (e.key === "Escape") { setEditingStageId(null); setEditingStageName(""); }
+                          }}
+                          onBlur={() => renameCatalogItem(stage.id, editingStageName)}
+                        />
+                      ) : (
+                        <span className="font-semibold text-sm flex-1 truncate">{stage.code} - {stage.name}</span>
                       )}
+                      <span className="text-xs text-muted-foreground mr-1">{stage.subStages.length} sub.</span>
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={e => { e.stopPropagation(); setEditingStageId(stage.id); setEditingStageName(stage.name); }}>
+                        <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={e => { e.stopPropagation(); removeCatalogStage(stage.id); }}>
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
                     </div>
 
                     {stage.expanded && (
                       <div className="border-t px-3 py-2 pl-8 space-y-1">
                         {stage.subStages.map(sub => (
                           <div key={sub.id} className="flex items-center justify-between py-0.5 text-sm">
-                            <span className="truncate">{sub.code} - {sub.name}</span>
-                            {!sub.is_system && (
+                            {editingStageId === sub.id ? (
+                              <Input
+                                value={editingStageName}
+                                onChange={e => setEditingStageName(e.target.value)}
+                                className="h-6 text-xs flex-1 mr-2"
+                                autoFocus
+                                onKeyDown={e => {
+                                  if (e.key === "Enter") renameCatalogItem(sub.id, editingStageName);
+                                  if (e.key === "Escape") { setEditingStageId(null); setEditingStageName(""); }
+                                }}
+                                onBlur={() => renameCatalogItem(sub.id, editingStageName)}
+                              />
+                            ) : (
+                              <span className="truncate flex-1">{sub.code} - {sub.name}</span>
+                            )}
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => { setEditingStageId(sub.id); setEditingStageName(sub.name); }}>
+                                <Pencil className="h-2 w-2 text-muted-foreground" />
+                              </Button>
                               <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => removeCatalogSubStage(sub.id)}>
                                 <Trash2 className="h-2.5 w-2.5 text-destructive" />
                               </Button>
-                            )}
+                            </div>
                           </div>
                         ))}
                         <div className="flex gap-2 pt-1">

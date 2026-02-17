@@ -3,7 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import GlobalTopbar from "@/components/GlobalTopbar";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
-import { ChevronDown, ChevronRight, LayoutDashboard, Layers, Calculator, ShoppingCart, Package, Wallet, FileBarChart } from "lucide-react";
+import { ChevronDown, ChevronRight, LayoutDashboard, Layers, Calculator, ShoppingCart, Package, Wallet, FileBarChart, ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import ConstructionDashboard from "@/components/construction/ConstructionDashboard";
@@ -159,12 +160,14 @@ export default function ConstructionPage() {
             <h1 className="text-xl font-bold text-foreground">Obras / Construção</h1>
             {studyName && <p className="text-sm text-muted-foreground">{studyName}</p>}
           </div>
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => navigate(`/studies/${studyId}/dashboard`)}
-            className="text-sm text-primary hover:text-primary-hover font-medium transition-colors"
           >
-            ← Voltar ao Estudo
-          </button>
+            <ArrowLeft className="h-4 w-4 mr-1.5" />
+            Voltar
+          </Button>
         </div>
 
         {/* Main layout */}
@@ -181,7 +184,7 @@ export default function ConstructionPage() {
                         className={cn(
                           "flex items-center gap-2 w-full text-left py-2 px-2 rounded-lg text-sm font-medium transition-colors",
                           activeView === item.key
-                            ? "bg-primary/10 text-primary"
+                            ? "bg-muted text-foreground"
                             : "text-foreground hover:bg-muted/50"
                         )}
                       >
