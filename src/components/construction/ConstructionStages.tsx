@@ -394,6 +394,39 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     onStagesChanged();
   };
 
+  /** Recursively collect all descendant IDs */
+  const collectAllDescendants = (parentId: string): string[] => {
+    const children = stages.filter(s => s.parent_id === parentId);
+    return children.flatMap(c => [c.id, ...collectAllDescendants(c.id)]);
+  };
+
+  /** Check if all children of a parent have a given status, and propagate up */
+  const propagateStatusUp = async (childStageId: string, newStatus: string, currentStages: StageRow[]) => {
+    const childStage = currentStages.find(s => s.id === childStageId);
+    if (!childStage?.parent_id) return;
+
+    const parentId = childStage.parent_id;
+    const siblings = currentStages.filter(s => s.parent_id === parentId);
+
+    // Check all siblings' effective status (considering the one being changed)
+    const allFinished = siblings.every(s => {
+      const effectiveStatus = s.id === childStageId ? newStatus : s.status;
+      return effectiveStatus === "finished";
+    });
+
+    if (allFinished) {
+      await supabase.from("construction_stages" as any).update({ status: "finished" }).eq("id", parentId);
+      // Continue propagating up
+      await propagateStatusUp(parentId, "finished", currentStages);
+    } else {
+      // If parent was finished but now a child isn't, reset parent
+      const parent = currentStages.find(s => s.id === parentId);
+      if (parent?.status === "finished") {
+        await supabase.from("construction_stages" as any).update({ status: "pending" }).eq("id", parentId);
+      }
+    }
+  };
+
   const handleFieldChange = async (stageId: string, field: string, value: any) => {
     const update: any = { [field]: value };
     if (field === "quantity" || field === "unit_price") {
@@ -405,14 +438,33 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       }
     }
     await supabase.from("construction_stages" as any).update(update).eq("id", stageId);
-    
-    // If setting dependency on a parent stage, propagate to children
+
+    // Status propagation logic
+    if (field === "status") {
+      const stage = stages.find(s => s.id === stageId);
+      if (stage) {
+        const children = stages.filter(s => s.parent_id === stageId);
+        // If this is a parent (macro), propagate status down to all descendants
+        if (children.length > 0) {
+          const allDescendantIds = collectAllDescendants(stageId);
+          if (allDescendantIds.length > 0) {
+            await supabase.from("construction_stages" as any)
+              .update({ status: value })
+              .in("id", allDescendantIds);
+          }
+        }
+        // Propagate up: check if all siblings are finished → mark parent finished
+        await propagateStatusUp(stageId, value, stages);
+      }
+    }
+
+    // If setting dependency on a root stage, propagate to all descendants
     if (field === "dependency_id") {
-      const children = stages.filter(s => s.parent_id === stageId);
-      if (children.length > 0) {
+      const allDescendantIds = collectAllDescendants(stageId);
+      if (allDescendantIds.length > 0) {
         await supabase.from("construction_stages" as any)
           .update({ dependency_id: value })
-          .in("id", children.map(c => c.id));
+          .in("id", allDescendantIds);
       }
     }
     
@@ -428,14 +480,14 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     onStagesChanged();
   };
 
-  /** Get available dependency options for a stage (only previous siblings at same level) */
+  /** Get available dependency options - only for root (level 0) stages from position 2+ */
   const getDependencyOptions = (stage: StageRow): StageRow[] => {
-    const siblings = stages
-      .filter(s => s.parent_id === stage.parent_id)
-      .sort((a, b) => a.position - b.position);
-    const idx = siblings.findIndex(s => s.id === stage.id);
-    if (idx <= 0) return []; // First stage or not found - no dependencies
-    return siblings.slice(0, idx);
+    // Only root-level stages can have dependencies
+    if (stage.level !== 0) return [];
+    const roots = stages.filter(s => !s.parent_id).sort((a, b) => a.position - b.position);
+    const idx = roots.findIndex(s => s.id === stage.id);
+    if (idx <= 0) return []; // First root stage - no dependencies
+    return roots.slice(0, idx);
   };
 
   const getStatusBg = (status: string) => {
@@ -589,8 +641,8 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                   {formatBRNumber(stage.total_value)}
                 </div>
 
-                {/* Dependência - hidden when no options */}
-                {depOptions.length > 0 ? (
+                {/* Dependência - only for root level 0 stages */}
+                {stage.level === 0 && depOptions.length > 0 ? (
                   <Select
                     value={stage.dependency_id || "none"}
                     onValueChange={(v) => handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v)}
@@ -639,8 +691,8 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                 <div className="w-24 h-8" />
                 <div className="w-24 h-8" />
 
-                {/* Dependência for parent - hidden when no options */}
-                {depOptions.length > 0 ? (
+                {/* Dependência for parent - only for root level 0 stages */}
+                {stage.level === 0 && depOptions.length > 0 ? (
                   <Select
                     value={stage.dependency_id || "none"}
                     onValueChange={(v) => handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v)}
