@@ -585,13 +585,12 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
           <span className="text-sm font-semibold text-foreground flex-1">Etapas</span>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground w-20 text-center hidden sm:block">Unidade</span>
-            <span className="text-xs text-muted-foreground w-20 text-center hidden sm:block">Qtde.</span>
-            <span className="text-xs text-muted-foreground w-28 text-center hidden sm:block">Valor Unit.</span>
-            <span className="text-xs text-muted-foreground w-28 text-center hidden sm:block">Valor Total</span>
+            <span className="text-xs text-muted-foreground w-20 text-right hidden sm:block">Qtde.</span>
+            <span className="text-xs text-muted-foreground w-28 text-right hidden sm:block">Valor Unit.</span>
+            <span className="text-xs text-muted-foreground w-28 text-right hidden sm:block">Valor Total</span>
             <span className="w-[22px]" />
             <span className="w-8" />
           </div>
-          <span className="w-8" />
         </div>
 
         {rootStages.map((s) => renderStageRow(s, 0))}
