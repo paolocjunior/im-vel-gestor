@@ -198,29 +198,21 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     onStagesChanged();
   };
 
-  /** Renumber all siblings under a parent sequentially */
-  const renumberSiblings = async (parentId: string | null) => {
-    const siblings = stages.filter(s => s.parent_id === parentId).sort((a, b) => a.position - b.position);
-    const parentStage = parentId ? stages.find(s => s.id === parentId) : null;
+  /** Recursively renumber all siblings and their descendants under a parent */
+  const renumberSiblings = async (parentId: string | null, allStages?: StageRow[], parentCode?: string) => {
+    const stageList = allStages || stages;
+    const siblings = stageList.filter(s => s.parent_id === parentId).sort((a, b) => a.position - b.position);
     
     for (let i = 0; i < siblings.length; i++) {
       const newPos = i + 1;
-      const newCode = parentStage ? `${parentStage.code}.${newPos}` : `${newPos}`;
+      const newCode = parentCode ? `${parentCode}.${newPos}` : `${newPos}`;
       if (siblings[i].position !== newPos || siblings[i].code !== newCode) {
         await supabase.from("construction_stages" as any)
           .update({ position: newPos, code: newCode })
           .eq("id", siblings[i].id);
-        
-        // Also renumber children of this sibling if code changed
-        if (siblings[i].code !== newCode) {
-          const children = stages.filter(c => c.parent_id === siblings[i].id);
-          for (let j = 0; j < children.length; j++) {
-            await supabase.from("construction_stages" as any)
-              .update({ code: `${newCode}.${children[j].position}` })
-              .eq("id", children[j].id);
-          }
-        }
       }
+      // Always recurse into children with the new code
+      await renumberSiblings(siblings[i].id, stageList, newCode);
     }
   };
 
@@ -235,9 +227,20 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     await supabase.from("construction_stages" as any).update({ position: other.position }).eq("id", stage.id);
     await supabase.from("construction_stages" as any).update({ position: stage.position }).eq("id", other.id);
 
-    await fetchStages();
-    // After fetching, renumber to fix codes
-    await renumberSiblings(stage.parent_id);
+    // Fetch fresh data, then renumber everything from parent with correct parent code
+    const { data: freshStages } = await supabase
+      .from("construction_stages" as any)
+      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status")
+      .eq("study_id", studyId)
+      .eq("is_deleted", false)
+      .order("position");
+
+    if (freshStages) {
+      const parentStage = stage.parent_id ? (freshStages as any[]).find(s => s.id === stage.parent_id) : null;
+      const parentCode = parentStage ? parentStage.code : undefined;
+      await renumberSiblings(stage.parent_id, freshStages as any[], parentCode);
+    }
+
     await fetchStages();
     onStagesChanged();
   };
@@ -353,18 +356,31 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
   const handleDeleteStage = async () => {
     if (!deleteTarget) return;
-    const childIds = stages.filter(s => s.parent_id === deleteTarget.id).map(s => s.id);
-    if (childIds.length > 0) {
-      await supabase.from("construction_stages" as any).update({ is_deleted: true }).in("id", childIds);
-    }
-    await supabase.from("construction_stages" as any).update({ is_deleted: true }).eq("id", deleteTarget.id);
+    // Recursively collect all descendant IDs
+    const collectDescendants = (parentId: string): string[] => {
+      const children = stages.filter(s => s.parent_id === parentId);
+      return children.flatMap(c => [c.id, ...collectDescendants(c.id)]);
+    };
+    const allIds = [deleteTarget.id, ...collectDescendants(deleteTarget.id)];
+    await supabase.from("construction_stages" as any).update({ is_deleted: true }).in("id", allIds);
 
     toast.success("Etapa excluída");
     const parentId = deleteTarget.parent_id;
     setDeleteTarget(null);
-    await fetchStages();
-    // Renumber remaining siblings
-    await renumberSiblings(parentId);
+
+    // Fetch fresh data then renumber
+    const { data: freshStages } = await supabase
+      .from("construction_stages" as any)
+      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status")
+      .eq("study_id", studyId)
+      .eq("is_deleted", false)
+      .order("position");
+
+    if (freshStages) {
+      const parentStage = parentId ? (freshStages as any[]).find(s => s.id === parentId) : null;
+      await renumberSiblings(parentId, freshStages as any[], parentStage?.code);
+    }
+
     await fetchStages();
     onStagesChanged();
   };
