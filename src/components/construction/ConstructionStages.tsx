@@ -565,6 +565,14 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     const subIdx = getSubIndex(stage);
     const bgColor = isDark ? getStageColorDark(rootIdx, subIdx) : getStageColor(rootIdx, subIdx);
 
+    const getDeepTotal = (s: StageRow): number => {
+      const stageChildren = stages.filter(child => child.parent_id === s.id);
+      if (stageChildren.length === 0) return s.total_value || 0;
+      return stageChildren.reduce((sum, child) => sum + getDeepTotal(child), 0);
+    };
+
+    const stageTotalValue = getDeepTotal(stage);
+
     const siblings = stages.filter(s => s.parent_id === stage.parent_id).sort((a, b) => a.position - b.position);
     const siblingIdx = siblings.findIndex(s => s.id === stage.id);
     const canMoveUp = siblingIdx > 0;
@@ -637,9 +645,13 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                 />
 
                 {/* V. Total */}
-                <div className="w-24 h-8 flex items-center justify-end text-xs font-medium text-foreground">
-                  {formatBRNumber(stage.total_value)}
-                </div>
+                <MaskedNumberInput
+                  className="w-24 h-8 text-xs text-right bg-background/80 font-medium"
+                  value={stageTotalValue}
+                  onValueChange={() => {}}
+                  readOnly
+                  tabIndex={-1}
+                />
 
                 {/* Dependência - only for root level 0 stages */}
                 {stage.level === 0 && depOptions.length > 0 ? (
@@ -689,7 +701,13 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                 <div className="w-16 h-8" />
                 <div className="w-16 h-8" />
                 <div className="w-24 h-8" />
-                <div className="w-24 h-8" />
+                <MaskedNumberInput
+                  className="w-24 h-8 text-xs text-right bg-background/80 font-medium"
+                  value={stageTotalValue}
+                  onValueChange={() => {}}
+                  readOnly
+                  tabIndex={-1}
+                />
 
                 {/* Dependência for parent - only for root level 0 stages */}
                 {stage.level === 0 && depOptions.length > 0 ? (
