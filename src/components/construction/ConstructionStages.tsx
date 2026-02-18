@@ -337,6 +337,22 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
     if (error) { toast.error("Erro ao adicionar etapa"); return; }
 
+    // Reset ancestor statuses to pending since there's now an unfinished sub-stage
+    if (addParentId) {
+      const ancestorIds: string[] = [];
+      let currentId: string | null = addParentId;
+      while (currentId) {
+        ancestorIds.push(currentId);
+        const parent = stages.find(s => s.id === currentId);
+        currentId = parent?.parent_id || null;
+      }
+      if (ancestorIds.length > 0) {
+        await supabase.from("construction_stages" as any)
+          .update({ status: "pending" })
+          .in("id", ancestorIds);
+      }
+    }
+
     toast.success("Etapa adicionada");
     setAddDialogOpen(false);
     setSelectedCatalogId("");
