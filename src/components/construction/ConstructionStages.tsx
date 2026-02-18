@@ -8,9 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, ChevronDown, ChevronRight, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Plus, ChevronDown, ChevronRight, Trash2, ArrowUp, ArrowDown, CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface CatalogItem {
   id: string;
@@ -44,6 +48,7 @@ interface StageRow {
   end_date: string | null;
   area_m2: number;
   status: string;
+  dependency_id: string | null;
 }
 
 interface Props {
@@ -57,7 +62,6 @@ function getStageColor(rootIndex: number, subIndex: number): string {
   const goldenAngle = 137.508;
   const hue = (rootIndex * goldenAngle) % 360;
   const saturation = 28;
-  // For sub-stages, vary lightness per sub-index within range 89-93
   const lightness = subIndex < 0 ? 86 : Math.min(93, 89 + subIndex * 1.5);
   return `hsl(${Math.round(hue)}, ${saturation}%, ${lightness}%)`;
 }
@@ -68,6 +72,14 @@ function getStageColorDark(rootIndex: number, subIndex: number): string {
   const saturation = 25;
   const lightness = subIndex < 0 ? 14 : Math.max(10, 20 - subIndex * 1.5);
   return `hsl(${Math.round(hue)}, ${saturation}%, ${lightness}%)`;
+}
+
+function formatDateShort(d: string | null) {
+  if (!d) return "";
+  const date = new Date(d + "T12:00:00");
+  const day = String(date.getDate()).padStart(2, "0");
+  const months = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  return `${day}/${months[date.getMonth()]}`;
 }
 
 export default function ConstructionStages({ studyId, onStagesChanged, onIncompleteStagesChange }: Props) {
@@ -106,12 +118,11 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
   const fetchStages = useCallback(async () => {
     const { data } = await supabase
       .from("construction_stages" as any)
-      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status")
+      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status, dependency_id")
       .eq("study_id", studyId)
       .eq("is_deleted", false)
       .order("position");
     if (data) {
-      // Filter out orphaned stages whose parent was deleted
       const idSet = new Set((data as any[]).map((s: any) => s.id));
       const valid = (data as any[]).filter((s: any) => !s.parent_id || idSet.has(s.parent_id));
       setStages(valid);
@@ -146,7 +157,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
   const minDate = allDates.length > 0 ? allDates.sort()[0] : null;
   const maxDate = allDates.length > 0 ? allDates.sort().reverse()[0] : null;
 
-  const formatDate = (d: string | null) => {
+  const formatDateFull = (d: string | null) => {
     if (!d) return "--/--/----";
     const [y, m, day] = d.split("-");
     return `${day}/${m}/${y}`;
@@ -176,7 +187,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
   };
 
   const getSubIndex = (stage: StageRow): number => {
-    if (!stage.parent_id) return -1; // macro
+    if (!stage.parent_id) return -1;
     const siblings = stages.filter(s => s.parent_id === stage.parent_id).sort((a, b) => a.position - b.position);
     return siblings.indexOf(stage);
   };
@@ -204,7 +215,6 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     onStagesChanged();
   };
 
-  /** Recursively renumber all siblings and their descendants under a parent */
   const renumberSiblings = async (parentId: string | null, allStages?: StageRow[], parentCode?: string) => {
     const stageList = allStages || stages;
     const siblings = stageList.filter(s => s.parent_id === parentId).sort((a, b) => a.position - b.position);
@@ -217,7 +227,6 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
           .update({ position: newPos, code: newCode })
           .eq("id", siblings[i].id);
       }
-      // Always recurse into children with the new code
       await renumberSiblings(siblings[i].id, stageList, newCode);
     }
   };
@@ -229,14 +238,12 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     if (swapIdx < 0 || swapIdx >= siblings.length) return;
 
     const other = siblings[swapIdx];
-    // Swap positions
     await supabase.from("construction_stages" as any).update({ position: other.position }).eq("id", stage.id);
     await supabase.from("construction_stages" as any).update({ position: stage.position }).eq("id", other.id);
 
-    // Fetch fresh data, then renumber everything from parent with correct parent code
     const { data: freshStages } = await supabase
       .from("construction_stages" as any)
-      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status")
+      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status, dependency_id")
       .eq("study_id", studyId)
       .eq("is_deleted", false)
       .order("position");
@@ -271,7 +278,6 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
           const parts = c.code.split('.');
           return Math.max(max, parseInt(parts[parts.length - 1], 10) || 0);
         }, 0);
-        // Parent code is just a number like "1", so sub is "1.X"
         const parentCode = pStage?.code || '0';
         catalogCode = `${parentCode}.${maxSubNum + 1}`;
         catalogPosition = existingSubs.length + 1;
@@ -310,7 +316,6 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     const position = siblings.length + 1;
     const parentStage = addParentId ? stages.find((s) => s.id === addParentId) : null;
     
-    // Code: macro = just number "1", "2"...; sub = "parentCode.N"
     const maxNum = siblings.length > 0
       ? Math.max(...siblings.map(s => {
           const parts = s.code.split('.');
@@ -362,7 +367,6 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
   const handleDeleteStage = async () => {
     if (!deleteTarget) return;
-    // Recursively collect all descendant IDs
     const collectDescendants = (parentId: string): string[] => {
       const children = stages.filter(s => s.parent_id === parentId);
       return children.flatMap(c => [c.id, ...collectDescendants(c.id)]);
@@ -374,10 +378,9 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     const parentId = deleteTarget.parent_id;
     setDeleteTarget(null);
 
-    // Fetch fresh data then renumber
     const { data: freshStages } = await supabase
       .from("construction_stages" as any)
-      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status")
+      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status, dependency_id")
       .eq("study_id", studyId)
       .eq("is_deleted", false)
       .order("position");
@@ -402,9 +405,103 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       }
     }
     await supabase.from("construction_stages" as any).update(update).eq("id", stageId);
+    
+    // If setting dependency on a parent stage, propagate to children
+    if (field === "dependency_id") {
+      const children = stages.filter(s => s.parent_id === stageId);
+      if (children.length > 0) {
+        await supabase.from("construction_stages" as any)
+          .update({ dependency_id: value })
+          .in("id", children.map(c => c.id));
+      }
+    }
+    
     fetchStages();
     onStagesChanged();
   };
+
+  const handleDateRangeChange = async (stageId: string, startDate: string | null, endDate: string | null) => {
+    await supabase.from("construction_stages" as any)
+      .update({ start_date: startDate, end_date: endDate })
+      .eq("id", stageId);
+    fetchStages();
+    onStagesChanged();
+  };
+
+  /** Get available dependency options for a stage (only previous siblings at same level) */
+  const getDependencyOptions = (stage: StageRow): StageRow[] => {
+    const siblings = stages
+      .filter(s => s.parent_id === stage.parent_id)
+      .sort((a, b) => a.position - b.position);
+    const idx = siblings.findIndex(s => s.id === stage.id);
+    if (idx <= 0) return []; // First stage or not found - no dependencies
+    return siblings.slice(0, idx);
+  };
+
+  const getStatusBg = (status: string) => {
+    switch (status) {
+      case "stopped": return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
+      case "in_progress": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
+      case "finished": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+      default: return "bg-muted text-muted-foreground";
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "stopped": return "Parado";
+      case "in_progress": return "Em andamento";
+      case "finished": return "Finalizado";
+      default: return "—";
+    }
+  };
+
+  function DateRangePicker({ stage }: { stage: StageRow }) {
+    const [open, setOpen] = useState(false);
+    const startDate = stage.start_date ? new Date(stage.start_date + "T12:00:00") : undefined;
+    const endDate = stage.end_date ? new Date(stage.end_date + "T12:00:00") : undefined;
+    const [range, setRange] = useState<{ from?: Date; to?: Date }>({ from: startDate, to: endDate });
+
+    const handleSelect = (selected: any) => {
+      if (!selected) return;
+      setRange({ from: selected.from, to: selected.to });
+      if (selected.from && selected.to) {
+        const fmt = (d: Date) => format(d, "yyyy-MM-dd");
+        handleDateRangeChange(stage.id, fmt(selected.from), fmt(selected.to));
+        setOpen(false);
+      }
+    };
+
+    const displayText = stage.start_date && stage.end_date
+      ? `${formatDateShort(stage.start_date)}-${formatDateShort(stage.end_date)}`
+      : "";
+
+    return (
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            className={cn(
+              "w-[120px] h-8 text-xs text-left px-2 rounded-md border border-input bg-background/80 flex items-center gap-1",
+              !displayText && "text-muted-foreground"
+            )}
+          >
+            <CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+            <span className="truncate">{displayText || "Período"}</span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+          <Calendar
+            mode="range"
+            selected={range as any}
+            onSelect={handleSelect}
+            numberOfMonths={1}
+            locale={ptBR}
+            className="p-3 pointer-events-auto"
+          />
+        </PopoverContent>
+      </Popover>
+    );
+  }
 
   function renderStageRow(stage: StageRow, depth: number) {
     const children = stages.filter((s) => s.parent_id === stage.id);
@@ -421,11 +518,14 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     const canMoveUp = siblingIdx > 0;
     const canMoveDown = siblingIdx < siblings.length - 1;
 
+    const depOptions = getDependencyOptions(stage);
+    const depStage = stage.dependency_id ? stages.find(s => s.id === stage.dependency_id) : null;
+
     return (
       <div key={stage.id}>
         <div
           className={cn(
-            "flex items-center gap-2 py-2 px-2 border-b border-border/50 hover:brightness-95 transition-all",
+            "flex items-center gap-1.5 py-2 px-2 border-b border-border/50 hover:brightness-95 transition-all",
             depth === 0 && "font-semibold"
           )}
           style={{ paddingLeft: `${depth * 20 + 8}px`, backgroundColor: bgColor }}
@@ -438,14 +538,14 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
             )}
           </button>
 
-          <span className="text-sm min-w-[180px] truncate">
+          <span className="text-sm min-w-[120px] flex-shrink-0" style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
             {stage.code} - {stage.name}
           </span>
 
           {isLeaf ? (
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-1.5 ml-auto flex-wrap">
               <Select value={stage.unit_id || ""} onValueChange={(v) => handleFieldChange(stage.id, "unit_id", v)}>
-                <SelectTrigger className="w-20 h-8 text-xs bg-background/80"><SelectValue placeholder="Un." /></SelectTrigger>
+                <SelectTrigger className="w-16 h-8 text-xs bg-background/80"><SelectValue placeholder="Un." /></SelectTrigger>
                 <SelectContent>
                   {units.map((u) => (
                     <SelectItem key={u.id} value={u.id} className="text-xs">{u.abbreviation}</SelectItem>
@@ -455,7 +555,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
               <MaskedNumberInput
                 id={`qty-${stage.id}`}
-                className="w-20 h-8 text-xs text-right bg-background/80"
+                className="w-16 h-8 text-xs text-right bg-background/80"
                 value={stage.quantity}
                 onValueChange={(v) => handleFieldChange(stage.id, "quantity", v)}
                 decimals={unit?.has_decimals ? 2 : 0}
@@ -467,18 +567,57 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
               <MaskedNumberInput
                 id={`price-${stage.id}`}
-                className="w-28 h-8 text-xs text-right bg-background/80"
+                className="w-24 h-8 text-xs text-right bg-background/80"
                 value={stage.unit_price}
                 onValueChange={(v) => handleFieldChange(stage.id, "unit_price", v)}
-                placeholder="Valor Unit."
+                placeholder="V. Unit."
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
                 }}
               />
 
-              <div className="w-28 h-8 flex items-center justify-end text-xs font-medium text-foreground">
+              <div className="w-24 h-8 flex items-center justify-end text-xs font-medium text-foreground">
                 {formatBRNumber(stage.total_value)}
               </div>
+
+              {/* Dependência */}
+              <Select
+                value={stage.dependency_id || "none"}
+                onValueChange={(v) => handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v)}
+                disabled={depOptions.length === 0}
+              >
+                <SelectTrigger className="w-20 h-8 text-xs bg-background/80">
+                  <SelectValue placeholder="Dep." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" className="text-xs">—</SelectItem>
+                  {depOptions.map((d) => (
+                    <SelectItem key={d.id} value={d.id} className="text-xs">{d.code}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Período */}
+              <DateRangePicker stage={stage} />
+
+              {/* Status */}
+              <Select value={stage.status || "pending"} onValueChange={(v) => handleFieldChange(stage.id, "status", v)}>
+                <SelectTrigger className={cn("w-[110px] h-8 text-xs border-0", getStatusBg(stage.status))}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending" className="text-xs">—</SelectItem>
+                  <SelectItem value="stopped" className="text-xs">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" />Parado</span>
+                  </SelectItem>
+                  <SelectItem value="in_progress" className="text-xs">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500" />Em andamento</span>
+                  </SelectItem>
+                  <SelectItem value="finished" className="text-xs">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500" />Finalizado</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
 
               {/* Reorder buttons */}
               <div className="flex flex-col">
@@ -505,10 +644,47 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-2 ml-auto">
-              <div className="text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5 ml-auto flex-wrap">
+              {/* Parent totals */}
+              <div className="text-xs text-muted-foreground mr-1">
                 Total: R$ {formatBRNumber(children.reduce((sum, c) => sum + (Number(c.total_value) || 0), 0))}
               </div>
+
+              {/* Dependência for parent */}
+              <Select
+                value={stage.dependency_id || "none"}
+                onValueChange={(v) => handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v)}
+                disabled={depOptions.length === 0}
+              >
+                <SelectTrigger className="w-20 h-8 text-xs bg-background/80">
+                  <SelectValue placeholder="Dep." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" className="text-xs">—</SelectItem>
+                  {depOptions.map((d) => (
+                    <SelectItem key={d.id} value={d.id} className="text-xs">{d.code}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Status for parent */}
+              <Select value={stage.status || "pending"} onValueChange={(v) => handleFieldChange(stage.id, "status", v)}>
+                <SelectTrigger className={cn("w-[110px] h-8 text-xs border-0", getStatusBg(stage.status))}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending" className="text-xs">—</SelectItem>
+                  <SelectItem value="stopped" className="text-xs">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" />Parado</span>
+                  </SelectItem>
+                  <SelectItem value="in_progress" className="text-xs">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500" />Em andamento</span>
+                  </SelectItem>
+                  <SelectItem value="finished" className="text-xs">
+                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500" />Finalizado</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
 
               {/* Reorder buttons for parent stages */}
               <div className="flex flex-col">
@@ -569,7 +745,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
         {minDate && maxDate && (
           <div className="text-center mb-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Período</p>
-            <p className="text-sm font-semibold text-foreground">{formatDate(minDate)} à {formatDate(maxDate)}</p>
+            <p className="text-sm font-semibold text-foreground">{formatDateFull(minDate)} à {formatDateFull(maxDate)}</p>
           </div>
         )}
         <div className="flex justify-end">
@@ -583,11 +759,14 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       <div className="card-dashboard p-0 overflow-hidden">
         <div className="flex items-center px-4 py-3 bg-muted/30 border-b">
           <span className="text-sm font-semibold text-foreground flex-1">Etapas</span>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground w-20 text-center hidden sm:block">Unidade</span>
-            <span className="text-xs text-muted-foreground w-20 text-right hidden sm:block">Qtde.</span>
-            <span className="text-xs text-muted-foreground w-28 text-right hidden sm:block">Valor Unit.</span>
-            <span className="text-xs text-muted-foreground w-28 text-right hidden sm:block">Valor Total</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground w-16 text-center hidden sm:block">Unidade</span>
+            <span className="text-xs text-muted-foreground w-16 text-right hidden sm:block">Qtde.</span>
+            <span className="text-xs text-muted-foreground w-24 text-right hidden sm:block">V. Unit.</span>
+            <span className="text-xs text-muted-foreground w-24 text-right hidden sm:block">V. Total</span>
+            <span className="text-xs text-muted-foreground w-20 text-center hidden sm:block">Dep.</span>
+            <span className="text-xs text-muted-foreground w-[120px] text-center hidden sm:block">Período</span>
+            <span className="text-xs text-muted-foreground w-[110px] text-center hidden sm:block">Status</span>
             <span className="w-[22px]" />
             <span className="w-8" />
           </div>

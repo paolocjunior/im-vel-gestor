@@ -1,0 +1,1 @@
+ALTER TABLE public.construction_stages ADD COLUMN dependency_id uuid REFERENCES public.construction_stages(id) DEFAULT NULL;
