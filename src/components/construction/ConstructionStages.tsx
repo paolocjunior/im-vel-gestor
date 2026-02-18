@@ -538,179 +538,175 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
             )}
           </button>
 
-          <span className="text-sm min-w-[120px] flex-shrink-0" style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
-            {stage.code} - {stage.name}
-          </span>
+          {/* Name with horizontal scroll */}
+          <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
+            <span className="text-sm whitespace-nowrap">
+              {stage.code} - {stage.name}
+            </span>
+          </div>
 
-          {isLeaf ? (
-            <div className="flex items-center gap-1.5 ml-auto flex-wrap">
-              <Select value={stage.unit_id || ""} onValueChange={(v) => handleFieldChange(stage.id, "unit_id", v)}>
-                <SelectTrigger className="w-16 h-8 text-xs bg-background/80"><SelectValue placeholder="Un." /></SelectTrigger>
-                <SelectContent>
-                  {units.map((u) => (
-                    <SelectItem key={u.id} value={u.id} className="text-xs">{u.abbreviation}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Fixed columns */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {isLeaf ? (
+              <>
+                {/* Unidade */}
+                <Select value={stage.unit_id || ""} onValueChange={(v) => handleFieldChange(stage.id, "unit_id", v)}>
+                  <SelectTrigger className="w-16 h-8 text-xs bg-background/80"><SelectValue placeholder="Un." /></SelectTrigger>
+                  <SelectContent>
+                    {units.map((u) => (
+                      <SelectItem key={u.id} value={u.id} className="text-xs">{u.abbreviation}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              <MaskedNumberInput
-                id={`qty-${stage.id}`}
-                className="w-16 h-8 text-xs text-right bg-background/80"
-                value={stage.quantity}
-                onValueChange={(v) => handleFieldChange(stage.id, "quantity", v)}
-                decimals={unit?.has_decimals ? 2 : 0}
-                placeholder="Qtde."
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); document.getElementById(`price-${stage.id}`)?.focus(); }
-                }}
-              />
+                {/* Qtde */}
+                <MaskedNumberInput
+                  id={`qty-${stage.id}`}
+                  className="w-16 h-8 text-xs text-right bg-background/80"
+                  value={stage.quantity}
+                  onValueChange={(v) => handleFieldChange(stage.id, "quantity", v)}
+                  decimals={unit?.has_decimals ? 2 : 0}
+                  placeholder="Qtde."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); document.getElementById(`price-${stage.id}`)?.focus(); }
+                  }}
+                />
 
-              <MaskedNumberInput
-                id={`price-${stage.id}`}
-                className="w-24 h-8 text-xs text-right bg-background/80"
-                value={stage.unit_price}
-                onValueChange={(v) => handleFieldChange(stage.id, "unit_price", v)}
-                placeholder="V. Unit."
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
-                }}
-              />
+                {/* V. Unit. */}
+                <MaskedNumberInput
+                  id={`price-${stage.id}`}
+                  className="w-24 h-8 text-xs text-right bg-background/80"
+                  value={stage.unit_price}
+                  onValueChange={(v) => handleFieldChange(stage.id, "unit_price", v)}
+                  placeholder="V. Unit."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
+                  }}
+                />
 
-              <div className="w-24 h-8 flex items-center justify-end text-xs font-medium text-foreground">
-                {formatBRNumber(stage.total_value)}
-              </div>
+                {/* V. Total */}
+                <div className="w-24 h-8 flex items-center justify-end text-xs font-medium text-foreground">
+                  {formatBRNumber(stage.total_value)}
+                </div>
 
-              {/* Dependência */}
-              <Select
-                value={stage.dependency_id || "none"}
-                onValueChange={(v) => handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v)}
-                disabled={depOptions.length === 0}
+                {/* Dependência - hidden when no options */}
+                {depOptions.length > 0 ? (
+                  <Select
+                    value={stage.dependency_id || "none"}
+                    onValueChange={(v) => handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v)}
+                  >
+                    <SelectTrigger className="w-20 h-8 text-xs bg-background/80">
+                      <SelectValue placeholder="—" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-xs">—</SelectItem>
+                      {depOptions.map((d) => (
+                        <SelectItem key={d.id} value={d.id} className="text-xs">{d.code}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="w-20 h-8" />
+                )}
+
+                {/* Período */}
+                <DateRangePicker stage={stage} />
+
+                {/* Status */}
+                <Select value={stage.status || "pending"} onValueChange={(v) => handleFieldChange(stage.id, "status", v)}>
+                  <SelectTrigger className={cn("w-[110px] h-8 text-xs border-0", getStatusBg(stage.status))}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending" className="text-xs">—</SelectItem>
+                    <SelectItem value="stopped" className="text-xs">
+                      <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" />Parado</span>
+                    </SelectItem>
+                    <SelectItem value="in_progress" className="text-xs">
+                      <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500" />Em andamento</span>
+                    </SelectItem>
+                    <SelectItem value="finished" className="text-xs">
+                      <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500" />Finalizado</span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
+            ) : (
+              <>
+                {/* Empty spacers for Unidade + Qtde + V.Unit + V.Total columns */}
+                <div className="w-16 h-8" />
+                <div className="w-16 h-8" />
+                <div className="w-24 h-8" />
+                <div className="w-24 h-8" />
+
+                {/* Dependência for parent - hidden when no options */}
+                {depOptions.length > 0 ? (
+                  <Select
+                    value={stage.dependency_id || "none"}
+                    onValueChange={(v) => handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v)}
+                  >
+                    <SelectTrigger className="w-20 h-8 text-xs bg-background/80">
+                      <SelectValue placeholder="—" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-xs">—</SelectItem>
+                      {depOptions.map((d) => (
+                        <SelectItem key={d.id} value={d.id} className="text-xs">{d.code}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="w-20 h-8" />
+                )}
+
+                {/* Período spacer for parent */}
+                <div className="w-[120px] h-8" />
+
+                {/* Status for parent */}
+                <Select value={stage.status || "pending"} onValueChange={(v) => handleFieldChange(stage.id, "status", v)}>
+                  <SelectTrigger className={cn("w-[110px] h-8 text-xs border-0", getStatusBg(stage.status))}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending" className="text-xs">—</SelectItem>
+                    <SelectItem value="stopped" className="text-xs">
+                      <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" />Parado</span>
+                    </SelectItem>
+                    <SelectItem value="in_progress" className="text-xs">
+                      <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500" />Em andamento</span>
+                    </SelectItem>
+                    <SelectItem value="finished" className="text-xs">
+                      <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500" />Finalizado</span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+
+            {/* Reorder buttons */}
+            <div className="flex flex-col">
+              <button
+                className={cn("p-0.5", canMoveUp ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/20 cursor-default")}
+                onClick={() => canMoveUp && handleMoveStage(stage, 'up')}
+                disabled={!canMoveUp}
+                title="Mover para cima"
               >
-                <SelectTrigger className="w-20 h-8 text-xs bg-background/80">
-                  <SelectValue placeholder="Dep." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none" className="text-xs">—</SelectItem>
-                  {depOptions.map((d) => (
-                    <SelectItem key={d.id} value={d.id} className="text-xs">{d.code}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Período */}
-              <DateRangePicker stage={stage} />
-
-              {/* Status */}
-              <Select value={stage.status || "pending"} onValueChange={(v) => handleFieldChange(stage.id, "status", v)}>
-                <SelectTrigger className={cn("w-[110px] h-8 text-xs border-0", getStatusBg(stage.status))}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending" className="text-xs">—</SelectItem>
-                  <SelectItem value="stopped" className="text-xs">
-                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" />Parado</span>
-                  </SelectItem>
-                  <SelectItem value="in_progress" className="text-xs">
-                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500" />Em andamento</span>
-                  </SelectItem>
-                  <SelectItem value="finished" className="text-xs">
-                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500" />Finalizado</span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Reorder buttons */}
-              <div className="flex flex-col">
-                <button
-                  className={cn("p-0.5", canMoveUp ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/20 cursor-default")}
-                  onClick={() => canMoveUp && handleMoveStage(stage, 'up')}
-                  disabled={!canMoveUp}
-                  title="Mover para cima"
-                >
-                  <ArrowUp className="h-3 w-3" />
-                </button>
-                <button
-                  className={cn("p-0.5", canMoveDown ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/20 cursor-default")}
-                  onClick={() => canMoveDown && handleMoveStage(stage, 'down')}
-                  disabled={!canMoveDown}
-                  title="Mover para baixo"
-                >
-                  <ArrowDown className="h-3 w-3" />
-                </button>
-              </div>
-
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={() => setDeleteTarget(stage)}>
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 ml-auto flex-wrap">
-              {/* Parent totals */}
-              <div className="text-xs text-muted-foreground mr-1">
-                Total: R$ {formatBRNumber(children.reduce((sum, c) => sum + (Number(c.total_value) || 0), 0))}
-              </div>
-
-              {/* Dependência for parent */}
-              <Select
-                value={stage.dependency_id || "none"}
-                onValueChange={(v) => handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v)}
-                disabled={depOptions.length === 0}
+                <ArrowUp className="h-3 w-3" />
+              </button>
+              <button
+                className={cn("p-0.5", canMoveDown ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/20 cursor-default")}
+                onClick={() => canMoveDown && handleMoveStage(stage, 'down')}
+                disabled={!canMoveDown}
+                title="Mover para baixo"
               >
-                <SelectTrigger className="w-20 h-8 text-xs bg-background/80">
-                  <SelectValue placeholder="Dep." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none" className="text-xs">—</SelectItem>
-                  {depOptions.map((d) => (
-                    <SelectItem key={d.id} value={d.id} className="text-xs">{d.code}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Status for parent */}
-              <Select value={stage.status || "pending"} onValueChange={(v) => handleFieldChange(stage.id, "status", v)}>
-                <SelectTrigger className={cn("w-[110px] h-8 text-xs border-0", getStatusBg(stage.status))}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending" className="text-xs">—</SelectItem>
-                  <SelectItem value="stopped" className="text-xs">
-                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" />Parado</span>
-                  </SelectItem>
-                  <SelectItem value="in_progress" className="text-xs">
-                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500" />Em andamento</span>
-                  </SelectItem>
-                  <SelectItem value="finished" className="text-xs">
-                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500" />Finalizado</span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Reorder buttons for parent stages */}
-              <div className="flex flex-col">
-                <button
-                  className={cn("p-0.5", canMoveUp ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/20 cursor-default")}
-                  onClick={() => canMoveUp && handleMoveStage(stage, 'up')}
-                  disabled={!canMoveUp}
-                  title="Mover para cima"
-                >
-                  <ArrowUp className="h-3 w-3" />
-                </button>
-                <button
-                  className={cn("p-0.5", canMoveDown ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/20 cursor-default")}
-                  onClick={() => canMoveDown && handleMoveStage(stage, 'down')}
-                  disabled={!canMoveDown}
-                  title="Mover para baixo"
-                >
-                  <ArrowDown className="h-3 w-3" />
-                </button>
-              </div>
-
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={() => setDeleteTarget(stage)}>
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
+                <ArrowDown className="h-3 w-3" />
+              </button>
             </div>
-          )}
+
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={() => setDeleteTarget(stage)}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
 
         {isExpanded && children.map((c) => renderStageRow(c, depth + 1))}
@@ -758,15 +754,15 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
       <div className="card-dashboard p-0 overflow-hidden">
         <div className="flex items-center px-4 py-3 bg-muted/30 border-b">
-          <span className="text-sm font-semibold text-foreground flex-1">Etapas</span>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground w-16 text-center hidden sm:block">Unidade</span>
-            <span className="text-xs text-muted-foreground w-16 text-right hidden sm:block">Qtde.</span>
-            <span className="text-xs text-muted-foreground w-24 text-right hidden sm:block">V. Unit.</span>
-            <span className="text-xs text-muted-foreground w-24 text-right hidden sm:block">V. Total</span>
-            <span className="text-xs text-muted-foreground w-20 text-center hidden sm:block">Dep.</span>
-            <span className="text-xs text-muted-foreground w-[120px] text-center hidden sm:block">Período</span>
-            <span className="text-xs text-muted-foreground w-[110px] text-center hidden sm:block">Status</span>
+          <span className="text-sm font-semibold text-foreground flex-1 min-w-0">Etapas</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-xs text-muted-foreground w-16 text-center">Unidade</span>
+            <span className="text-xs text-muted-foreground w-16 text-right">Qtde.</span>
+            <span className="text-xs text-muted-foreground w-24 text-right">V. Unit.</span>
+            <span className="text-xs text-muted-foreground w-24 text-right">V. Total</span>
+            <span className="text-xs text-muted-foreground w-20 text-center">Dep.</span>
+            <span className="text-xs text-muted-foreground w-[120px] text-center">Período</span>
+            <span className="text-xs text-muted-foreground w-[110px] text-center">Status</span>
             <span className="w-[22px]" />
             <span className="w-8" />
           </div>
