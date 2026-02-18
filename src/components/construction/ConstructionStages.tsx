@@ -124,14 +124,8 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     if (onIncompleteStagesChange) {
       const incompleteLeaves = stages.filter(s => {
         const hasChildren = stages.some(c => c.parent_id === s.id);
-        if (hasChildren) return false; // parent/container stages are never incomplete
-        // Only flag if at least one field was touched but not both filled
-        const qtyFilled = s.quantity > 0;
-        const priceFilled = s.unit_price > 0;
-        // If both are zero (untouched default), don't flag
-        if (!qtyFilled && !priceFilled) return false;
-        // If only one is filled, it's incomplete
-        return !qtyFilled || !priceFilled;
+        if (hasChildren) return false;
+        return s.quantity <= 0 || s.unit_price <= 0;
       });
       onIncompleteStagesChange(incompleteLeaves.map(s => `${s.code} - ${s.name}`));
     }
