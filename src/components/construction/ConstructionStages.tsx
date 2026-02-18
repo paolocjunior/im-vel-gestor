@@ -807,18 +807,18 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-foreground">Etapas</h2>
 
-      <div className="rounded-xl p-5" style={{ backgroundColor: isDark ? 'hsl(180, 28%, 12%)' : 'hsl(180, 28%, 88%)' }}>
-        {minDate && maxDate && (
-          <div className="text-center mb-4">
+      <div className="rounded-xl p-4 flex items-center justify-between" style={{ backgroundColor: isDark ? 'hsl(180, 28%, 12%)' : 'hsl(180, 28%, 88%)' }}>
+        {minDate && maxDate ? (
+          <div className="text-left">
             <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Período</p>
-            <p className="text-sm font-semibold text-foreground">{formatDateFull(minDate)} à {formatDateFull(maxDate)}</p>
+            <p className="kpi-value text-lg text-foreground">{formatDateFull(minDate)} à {formatDateFull(maxDate)}</p>
           </div>
+        ) : (
+          <div />
         )}
-        <div className="flex justify-end">
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Valor Total</p>
-            <p className="kpi-value text-lg">R$ {formatBRNumber(totalValue)}</p>
-          </div>
+        <div className="text-right">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Valor Total</p>
+          <p className="kpi-value text-lg text-foreground">R$ {formatBRNumber(totalValue)}</p>
         </div>
       </div>
 
