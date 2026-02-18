@@ -422,7 +422,7 @@ export default function BillsPage() {
 
         <div className="flex items-center justify-between">
           <Button size="sm" onClick={() => navigate(`/studies/${studyId}/bills/new`)}>Nova Despesa</Button>
-          <Button variant="outline" size="sm" onClick={() => navigate(`/studies/${studyId}/dashboard`)}>
+          <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
           </Button>
         </div>
