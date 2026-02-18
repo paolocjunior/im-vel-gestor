@@ -111,27 +111,6 @@ export default function ConstructionDashboard({ studyId, stageTree, onNavigateSt
           </div>
         ))}
       </div>
-
-      {/* Gantt placeholder */}
-      <div className="card-dashboard">
-        <h3 className="text-sm font-semibold text-foreground mb-4">Cronograma de Gantt</h3>
-        {stageTree.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Layers className="h-10 w-10 text-muted-foreground/40 mb-3" />
-            <p className="text-sm text-muted-foreground">Nenhuma etapa criada ainda</p>
-            <button
-              className="mt-3 text-sm text-primary hover:text-primary-hover font-medium transition-colors"
-              onClick={onNavigateStages}
-            >
-              Criar primeira etapa →
-            </button>
-          </div>
-        ) : (
-          <div className="text-sm text-muted-foreground italic py-8 text-center">
-            Cronograma será exibido após cadastrar etapas com datas.
-          </div>
-        )}
-      </div>
     </div>
   );
 }
