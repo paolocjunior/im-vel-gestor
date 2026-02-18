@@ -110,7 +110,12 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       .eq("study_id", studyId)
       .eq("is_deleted", false)
       .order("position");
-    if (data) setStages(data as any[]);
+    if (data) {
+      // Filter out orphaned stages whose parent was deleted
+      const idSet = new Set((data as any[]).map((s: any) => s.id));
+      const valid = (data as any[]).filter((s: any) => !s.parent_id || idSet.has(s.parent_id));
+      setStages(valid);
+    }
   }, [studyId]);
 
   useEffect(() => {
