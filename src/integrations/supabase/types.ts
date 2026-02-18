@@ -222,6 +222,7 @@ export type Database = {
           catalog_id: string | null
           code: string
           created_at: string
+          dependency_id: string | null
           end_date: string | null
           id: string
           is_deleted: boolean
@@ -243,6 +244,7 @@ export type Database = {
           catalog_id?: string | null
           code: string
           created_at?: string
+          dependency_id?: string | null
           end_date?: string | null
           id?: string
           is_deleted?: boolean
@@ -264,6 +266,7 @@ export type Database = {
           catalog_id?: string | null
           code?: string
           created_at?: string
+          dependency_id?: string | null
           end_date?: string | null
           id?: string
           is_deleted?: boolean
@@ -286,6 +289,13 @@ export type Database = {
             columns: ["catalog_id"]
             isOneToOne: false
             referencedRelation: "construction_stage_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "construction_stages_dependency_id_fkey"
+            columns: ["dependency_id"]
+            isOneToOne: false
+            referencedRelation: "construction_stages"
             referencedColumns: ["id"]
           },
           {

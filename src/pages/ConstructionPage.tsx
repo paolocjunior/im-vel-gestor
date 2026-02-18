@@ -101,12 +101,12 @@ export default function ConstructionPage() {
   const menuItems: { key: ViewType; label: string; icon: React.ElementType }[] = [
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { key: "stages", label: "Etapas", icon: Layers },
+    { key: "gantt", label: "Cronograma de Gantt", icon: GanttChart },
+    { key: "physical-financial", label: "Cronograma Físico-Financeiro", icon: CalendarRange },
     { key: "budget", label: "Orçamento", icon: Calculator },
     { key: "purchase-orders", label: "Pedido de Compra", icon: ShoppingCart },
     { key: "purchases", label: "Compras", icon: Package },
     { key: "financial", label: "Financeiro", icon: Wallet },
-    { key: "gantt", label: "Cronograma de Gantt", icon: GanttChart },
-    { key: "physical-financial", label: "Cronograma Físico-Financeiro", icon: CalendarRange },
     { key: "reports", label: "Relatórios", icon: FileBarChart },
   ];
 
