@@ -3,14 +3,14 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import GlobalTopbar from "@/components/GlobalTopbar";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
-import { ChevronDown, ChevronRight, LayoutDashboard, Layers, Calculator, ShoppingCart, Package, Wallet, FileBarChart, ArrowLeft } from "lucide-react";
+import { ChevronDown, ChevronRight, LayoutDashboard, Layers, Calculator, ShoppingCart, Package, Wallet, FileBarChart, ArrowLeft, GanttChart, CalendarRange } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import ConstructionDashboard from "@/components/construction/ConstructionDashboard";
 import ConstructionStages from "@/components/construction/ConstructionStages";
 
-type ViewType = "dashboard" | "stages" | "budget" | "purchase-orders" | "purchases" | "financial" | "reports";
+type ViewType = "dashboard" | "stages" | "budget" | "purchase-orders" | "purchases" | "financial" | "reports" | "gantt" | "physical-financial";
 
 interface StageTreeNode {
   id: string;
@@ -105,6 +105,8 @@ export default function ConstructionPage() {
     { key: "purchase-orders", label: "Pedido de Compra", icon: ShoppingCart },
     { key: "purchases", label: "Compras", icon: Package },
     { key: "financial", label: "Financeiro", icon: Wallet },
+    { key: "gantt", label: "Cronograma de Gantt", icon: GanttChart },
+    { key: "physical-financial", label: "Cronograma Físico-Financeiro", icon: CalendarRange },
     { key: "reports", label: "Relatórios", icon: FileBarChart },
   ];
 
