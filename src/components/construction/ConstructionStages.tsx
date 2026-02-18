@@ -581,13 +581,16 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       </div>
 
       <div className="card-dashboard p-0 overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-3 bg-muted/30 border-b">
+        <div className="flex items-center px-4 py-3 bg-muted/30 border-b">
           <span className="text-sm font-semibold text-foreground flex-1">Etapas</span>
-          <span className="text-xs text-muted-foreground w-20 text-center hidden sm:block">Unidade</span>
-          <span className="text-xs text-muted-foreground w-20 text-center hidden sm:block">Qtde.</span>
-          <span className="text-xs text-muted-foreground w-28 text-center hidden sm:block">Valor Unit.</span>
-          <span className="text-xs text-muted-foreground w-28 text-center hidden sm:block">Valor Total</span>
-          <span className="w-14" />
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground w-20 text-center hidden sm:block">Unidade</span>
+            <span className="text-xs text-muted-foreground w-20 text-center hidden sm:block">Qtde.</span>
+            <span className="text-xs text-muted-foreground w-28 text-center hidden sm:block">Valor Unit.</span>
+            <span className="text-xs text-muted-foreground w-28 text-center hidden sm:block">Valor Total</span>
+            <span className="w-[22px]" />
+            <span className="w-8" />
+          </div>
           <span className="w-8" />
         </div>
 
