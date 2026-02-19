@@ -204,4 +204,22 @@
     background-color: hsl(var(--border));
     border-radius: 2px;
   }
+
+  .gantt-sidebar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .gantt-sidebar::-webkit-scrollbar:vertical {
+    display: none;
+  }
+  .gantt-sidebar::-webkit-scrollbar:horizontal {
+    height: 6px;
+  }
+  .gantt-sidebar::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 3px;
+  }
+  .gantt-sidebar::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
