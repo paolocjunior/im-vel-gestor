@@ -474,15 +474,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       }
     }
 
-    // If setting dependency on a root stage, propagate to all descendants
-    if (field === "dependency_id") {
-      const allDescendantIds = collectAllDescendants(stageId);
-      if (allDescendantIds.length > 0) {
-        await supabase.from("construction_stages" as any)
-          .update({ dependency_id: value })
-          .in("id", allDescendantIds);
-      }
-    }
+    // Dependency is now per-stage (not propagated to descendants)
     
     fetchStages();
     onStagesChanged();
@@ -496,14 +488,12 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     onStagesChanged();
   };
 
-  /** Get available dependency options - only for root (level 0) stages from position 2+ */
+  /** Get available dependency options - any stage at same level under same parent, positioned before */
   const getDependencyOptions = (stage: StageRow): StageRow[] => {
-    // Only root-level stages can have dependencies
-    if (stage.level !== 0) return [];
-    const roots = stages.filter(s => !s.parent_id).sort((a, b) => a.position - b.position);
-    const idx = roots.findIndex(s => s.id === stage.id);
-    if (idx <= 0) return []; // First root stage - no dependencies
-    return roots.slice(0, idx);
+    const siblings = stages.filter(s => s.parent_id === stage.parent_id).sort((a, b) => a.position - b.position);
+    const idx = siblings.findIndex(s => s.id === stage.id);
+    if (idx <= 0) return []; // First sibling - no dependencies
+    return siblings.slice(0, idx);
   };
 
   const getStatusBg = (status: string) => {
@@ -669,8 +659,8 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                   tabIndex={-1}
                 />
 
-                {/* Dependência - only for root level 0 stages */}
-                {stage.level === 0 && depOptions.length > 0 ? (
+                {/* Dependência */}
+                {depOptions.length > 0 ? (
                   <Select
                     value={stage.dependency_id || "none"}
                     onValueChange={(v) => handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v)}
@@ -725,8 +715,8 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                   tabIndex={-1}
                 />
 
-                {/* Dependência for parent - only for root level 0 stages */}
-                {stage.level === 0 && depOptions.length > 0 ? (
+                {/* Dependência for parent */}
+                {depOptions.length > 0 ? (
                   <Select
                     value={stage.dependency_id || "none"}
                     onValueChange={(v) => handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v)}
