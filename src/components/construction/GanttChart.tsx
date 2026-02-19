@@ -31,14 +31,6 @@ interface Props {
   studyId: string;
 }
 
-function getStageColor(rootIndex: number, subIndex: number): string {
-  const goldenAngle = 137.508;
-  const hue = (rootIndex * goldenAngle) % 360;
-  const saturation = 38;
-  const lightness = subIndex < 0 ? 65 : Math.min(75, 68 + subIndex * 2);
-  return `hsl(${Math.round(hue)}, ${saturation}%, ${lightness}%)`;
-}
-
 function getStageBarColor(rootIndex: number, subIndex: number): string {
   const goldenAngle = 137.508;
   const hue = (rootIndex * goldenAngle) % 360;
@@ -94,6 +86,22 @@ function formatHeaderLabel(dateStr: string, scale: TimeScale): string {
   return `${MONTHS_PT[m - 1]}/${y}`;
 }
 
+/** Compute effective date range for a parent stage based on children */
+function getEffectiveDates(stage: StageRow, allStages: StageRow[]): { start: string | null; end: string | null } {
+  const children = allStages.filter(s => s.parent_id === stage.id);
+  if (children.length === 0) {
+    return { start: stage.start_date, end: stage.end_date };
+  }
+  let minStart: string | null = null;
+  let maxEnd: string | null = null;
+  for (const child of children) {
+    const childDates = getEffectiveDates(child, allStages);
+    if (childDates.start && (!minStart || childDates.start < minStart)) minStart = childDates.start;
+    if (childDates.end && (!maxEnd || childDates.end > maxEnd)) maxEnd = childDates.end;
+  }
+  return { start: minStart, end: maxEnd };
+}
+
 export default function GanttChart({ studyId }: Props) {
   const [stages, setStages] = useState<StageRow[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -103,8 +111,9 @@ export default function GanttChart({ studyId }: Props) {
   const [selectedStageIds, setSelectedStageIds] = useState<Set<string>>(new Set());
   const [filterApplied, setFilterApplied] = useState(false);
   const [dragging, setDragging] = useState<{ stageId: string; mode: "start" | "move" | "end"; startX: number; origStart: string; origEnd: string } | null>(null);
-  const chartRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const sidebarScrollRef = useRef<HTMLDivElement>(null);
+  const chartScrollRef = useRef<HTMLDivElement>(null);
 
   const fetchStages = useCallback(async () => {
     const { data } = await supabase
@@ -123,6 +132,34 @@ export default function GanttChart({ studyId }: Props) {
     const roots = stages.filter(s => !s.parent_id);
     setExpanded(new Set(roots.map(s => s.id)));
   }, [stages.length]);
+
+  // Sync vertical scroll between sidebar and chart
+  useEffect(() => {
+    const sidebar = sidebarScrollRef.current;
+    const chart = chartScrollRef.current;
+    if (!sidebar || !chart) return;
+
+    let syncing = false;
+    const syncSidebarToChart = () => {
+      if (syncing) return;
+      syncing = true;
+      chart.scrollTop = sidebar.scrollTop;
+      syncing = false;
+    };
+    const syncChartToSidebar = () => {
+      if (syncing) return;
+      syncing = true;
+      sidebar.scrollTop = chart.scrollTop;
+      syncing = false;
+    };
+
+    sidebar.addEventListener("scroll", syncSidebarToChart);
+    chart.addEventListener("scroll", syncChartToSidebar);
+    return () => {
+      sidebar.removeEventListener("scroll", syncSidebarToChart);
+      chart.removeEventListener("scroll", syncChartToSidebar);
+    };
+  }, []);
 
   const rootStages = stages.filter(s => !s.parent_id);
 
@@ -146,7 +183,6 @@ export default function GanttChart({ studyId }: Props) {
   const visibleStages = useMemo(() => {
     const result: StageRow[] = [];
     const addStage = (stage: StageRow) => {
-      // If filter is applied, check if this stage or any descendant is selected
       if (filterApplied && selectedStageIds.size > 0) {
         const isSelected = selectedStageIds.has(stage.id);
         const hasSelectedDescendant = stages.some(s => {
@@ -171,10 +207,17 @@ export default function GanttChart({ studyId }: Props) {
     return result;
   }, [stages, expanded, filterApplied, selectedStageIds, rootStages]);
 
-  // Calculate timeline bounds
-  const allDates = stages.flatMap(s => [s.start_date, s.end_date]).filter(Boolean) as string[];
-  const globalMin = allDates.length > 0 ? allDates.sort()[0] : todayISO();
-  const globalMax = allDates.length > 0 ? allDates.sort().reverse()[0] : addDays(todayISO(), 30);
+  // Calculate timeline bounds using effective dates (parent = sum of children)
+  const allEffectiveDates = stages.flatMap(s => {
+    const hasChildren = stages.some(c => c.parent_id === s.id);
+    if (hasChildren) {
+      const eff = getEffectiveDates(s, stages);
+      return [eff.start, eff.end].filter(Boolean) as string[];
+    }
+    return [s.start_date, s.end_date].filter(Boolean) as string[];
+  });
+  const globalMin = allEffectiveDates.length > 0 ? allEffectiveDates.sort()[0] : todayISO();
+  const globalMax = allEffectiveDates.length > 0 ? allEffectiveDates.sort().reverse()[0] : addDays(todayISO(), 30);
 
   const effectiveMin = periodStart || addDays(globalMin, -7);
   const effectiveMax = periodEnd || addDays(globalMax, 7);
@@ -215,11 +258,24 @@ export default function GanttChart({ studyId }: Props) {
   const ROW_HEIGHT = 40;
   const SIDEBAR_WIDTH = 250;
 
-  // Calculate bar position
+  // Calculate bar position - for parents, use effective dates from children
   const getBarStyle = (stage: StageRow) => {
-    if (!stage.start_date || !stage.end_date) return null;
-    const startOffset = diffDays(effectiveMin, stage.start_date);
-    const duration = diffDays(stage.start_date, stage.end_date) + 1;
+    const hasChildren = stages.some(s => s.parent_id === stage.id);
+    let startDate: string | null;
+    let endDate: string | null;
+
+    if (hasChildren) {
+      const eff = getEffectiveDates(stage, stages);
+      startDate = eff.start;
+      endDate = eff.end;
+    } else {
+      startDate = stage.start_date;
+      endDate = stage.end_date;
+    }
+
+    if (!startDate || !endDate) return null;
+    const startOffset = diffDays(effectiveMin, startDate);
+    const duration = diffDays(startDate, endDate) + 1;
     const pxPerDay = totalChartWidth / totalTimelineDays;
     return {
       left: startOffset * pxPerDay,
@@ -278,6 +334,9 @@ export default function GanttChart({ studyId }: Props) {
     e.preventDefault();
     const stage = stages.find(s => s.id === stageId);
     if (!stage?.start_date || !stage?.end_date) return;
+    // Don't allow dragging parent stages (their bars are computed from children)
+    const hasChildren = stages.some(s => s.parent_id === stageId);
+    if (hasChildren) return;
     setDragging({ stageId, mode, startX: e.clientX, origStart: stage.start_date, origEnd: stage.end_date });
   };
 
@@ -324,35 +383,57 @@ export default function GanttChart({ studyId }: Props) {
     };
   }, [dragging, stages, totalChartWidth, totalTimelineDays]);
 
-  // Draw dependency arrows
+  // Draw dependency arrows with proper routing (down-and-around when close)
   const renderArrows = () => {
     const arrows: JSX.Element[] = [];
     const pxPerDay = totalChartWidth / totalTimelineDays;
 
     visibleStages.forEach((stage, rowIdx) => {
-      if (!stage.dependency_id || !stage.start_date) return;
+      if (!stage.dependency_id) return;
       const depStage = stages.find(s => s.id === stage.dependency_id);
-      if (!depStage?.end_date) return;
+      if (!depStage) return;
       const depRowIdx = visibleStages.findIndex(s => s.id === depStage.id);
       if (depRowIdx < 0) return;
 
-      const depEndX = (diffDays(effectiveMin, depStage.end_date) + 1) * pxPerDay;
-      const stageStartX = diffDays(effectiveMin, stage.start_date) * pxPerDay;
+      // Get effective dates for both stages (parent bars use children dates)
+      const hasDepChildren = stages.some(s => s.parent_id === depStage.id);
+      const depDates = hasDepChildren ? getEffectiveDates(depStage, stages) : { start: depStage.start_date, end: depStage.end_date };
+      const hasStageChildren = stages.some(s => s.parent_id === stage.id);
+      const stageDates = hasStageChildren ? getEffectiveDates(stage, stages) : { start: stage.start_date, end: stage.end_date };
+
+      if (!depDates.end || !stageDates.start) return;
+
+      const depEndX = (diffDays(effectiveMin, depDates.end) + 1) * pxPerDay;
+      const stageStartX = diffDays(effectiveMin, stageDates.start) * pxPerDay;
       const depY = depRowIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
       const stageY = rowIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
 
-      const midX = depEndX + 8;
-      const arrowId = `arrow-${stage.id}`;
+      // Route the arrow: go right from dep end, then down, then left to stage start
+      const gapX = 12;
+      const dropY = Math.min(depY, stageY) + ROW_HEIGHT * 0.8;
+
+      let pathD: string;
+      if (stageStartX >= depEndX + 20) {
+        // Enough horizontal space - straight horizontal then vertical then horizontal
+        const midX = depEndX + gapX;
+        pathD = `M ${depEndX} ${depY} L ${midX} ${depY} L ${midX} ${stageY} L ${stageStartX} ${stageY}`;
+      } else {
+        // Not enough space - route down and around
+        const rightX = depEndX + gapX;
+        const bottomY = Math.max(depY, stageY) + ROW_HEIGHT * 0.4;
+        const leftX = stageStartX - gapX;
+        pathD = `M ${depEndX} ${depY} L ${rightX} ${depY} L ${rightX} ${bottomY} L ${leftX} ${bottomY} L ${leftX} ${stageY} L ${stageStartX} ${stageY}`;
+      }
 
       arrows.push(
-        <g key={arrowId}>
+        <g key={`arrow-${stage.id}`}>
           <defs>
             <marker id={`arrowhead-${stage.id}`} markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
               <polygon points="0 0, 8 3, 0 6" className="fill-muted-foreground/60" />
             </marker>
           </defs>
           <path
-            d={`M ${depEndX} ${depY} L ${midX} ${depY} L ${midX} ${stageY} L ${stageStartX} ${stageY}`}
+            d={pathD}
             fill="none"
             className="stroke-muted-foreground/50"
             strokeWidth={1.5}
@@ -376,7 +457,7 @@ export default function GanttChart({ studyId }: Props) {
           <div>
             <p className="text-xs text-muted-foreground mb-1">Período</p>
             <p className="text-lg font-semibold text-foreground">
-              {allDates.length > 0 ? `${formatDateBR(globalMin)} — ${formatDateBR(globalMax)}` : "Sem datas definidas"}
+              {allEffectiveDates.length > 0 ? `${formatDateBR(globalMin)} — ${formatDateBR(globalMax)}` : "Sem datas definidas"}
             </p>
           </div>
           <div className="text-right">
@@ -390,7 +471,6 @@ export default function GanttChart({ studyId }: Props) {
 
       {/* Filters */}
       <div className="rounded-xl border p-4 bg-card shadow-sm space-y-3">
-        {/* Period */}
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-sm font-medium">Período:</span>
           <Input type="date" className="w-40" value={periodStart} onChange={e => setPeriodStart(e.target.value)} />
@@ -399,7 +479,6 @@ export default function GanttChart({ studyId }: Props) {
           <Button variant="outline" size="sm" onClick={() => setPeriodPreset("month")}>Este Mês</Button>
           <Button variant="outline" size="sm" onClick={() => setPeriodPreset("year")}>Este Ano</Button>
         </div>
-        {/* Stage filter + Scale */}
         <div className="flex items-center gap-3 flex-wrap">
           <Popover>
             <PopoverTrigger asChild>
@@ -440,41 +519,50 @@ export default function GanttChart({ studyId }: Props) {
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
         <div className="flex" style={{ height: Math.max(visibleStages.length * ROW_HEIGHT + ROW_HEIGHT + 2, 200) }}>
           {/* Sidebar - Stage names */}
-          <div className="flex-shrink-0 border-r bg-card z-10" style={{ width: SIDEBAR_WIDTH }}>
+          <div className="flex-shrink-0 border-r bg-card z-10 flex flex-col" style={{ width: SIDEBAR_WIDTH }}>
             {/* Header */}
-            <div className="h-10 border-b flex items-center px-3 bg-muted/30">
+            <div className="h-10 border-b flex items-center px-3 bg-muted/30 shrink-0">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Etapas</span>
             </div>
-            {/* Rows */}
-            <div className="overflow-y-auto" style={{ height: visibleStages.length * ROW_HEIGHT }}>
-              {visibleStages.map(stage => {
-                const hasChildren = stages.some(s => s.parent_id === stage.id);
-                const isExpanded = expanded.has(stage.id);
-                return (
-                  <div
-                    key={stage.id}
-                    className="flex items-center border-b hover:bg-muted/30 transition-colors"
-                    style={{ height: ROW_HEIGHT, paddingLeft: `${(stage.level) * 16 + 8}px` }}
-                  >
-                    {hasChildren ? (
-                      <button onClick={() => toggleExpand(stage.id)} className="mr-1 p-0.5 rounded hover:bg-muted">
-                        {isExpanded ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
-                      </button>
-                    ) : (
-                      <span className="w-4 mr-1" />
-                    )}
-                    <span className="text-xs truncate text-foreground/80 font-medium">{stage.code} - {stage.name}</span>
-                  </div>
-                );
-              })}
+            {/* Rows - synced scroll */}
+            <div
+              ref={sidebarScrollRef}
+              className="overflow-x-auto overflow-y-auto flex-1"
+              style={{ maxHeight: visibleStages.length * ROW_HEIGHT }}
+            >
+              <div style={{ minWidth: SIDEBAR_WIDTH }}>
+                {visibleStages.map(stage => {
+                  const hasChildren = stages.some(s => s.parent_id === stage.id);
+                  const isExpanded = expanded.has(stage.id);
+                  return (
+                    <div
+                      key={stage.id}
+                      className="flex items-center border-b hover:bg-muted/30 transition-colors whitespace-nowrap"
+                      style={{ height: ROW_HEIGHT, paddingLeft: `${(stage.level) * 16 + 8}px` }}
+                    >
+                      {hasChildren ? (
+                        <button onClick={() => toggleExpand(stage.id)} className="mr-1 p-0.5 rounded hover:bg-muted">
+                          {isExpanded ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                        </button>
+                      ) : (
+                        <span className="w-4 mr-1" />
+                      )}
+                      <span className="text-xs text-foreground/80 font-medium">{stage.code} - {stage.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
           {/* Chart area */}
-          <div className="flex-1 overflow-x-auto overflow-y-auto gantt-chart-area">
+          <div
+            ref={chartScrollRef}
+            className="flex-1 overflow-x-auto overflow-y-auto gantt-chart-area"
+          >
             <div style={{ width: totalChartWidth, minWidth: "100%" }}>
               {/* Time header */}
-              <div className="h-10 border-b flex bg-muted/30">
+              <div className="h-10 border-b flex bg-muted/30 sticky top-0 z-10">
                 {timeColumns.map((col, i) => (
                   <div
                     key={i}
@@ -538,7 +626,8 @@ export default function GanttChart({ studyId }: Props) {
                       className={cn(
                         "absolute rounded-md flex items-center z-30 group",
                         hasChildren ? "opacity-70" : "",
-                        dragging?.stageId === stage.id ? "ring-2 ring-primary" : ""
+                        dragging?.stageId === stage.id ? "ring-2 ring-primary" : "",
+                        hasChildren ? "cursor-default" : ""
                       )}
                       style={{
                         top: rowIdx * ROW_HEIGHT + 8,
@@ -548,27 +637,40 @@ export default function GanttChart({ studyId }: Props) {
                         backgroundColor: color,
                       }}
                     >
-                      {/* Left resize handle */}
-                      <div
-                        className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-black/10 rounded-l-md"
-                        onMouseDown={e => handleMouseDown(e, stage.id, "start")}
-                      />
-                      {/* Center move handle */}
-                      <div
-                        className="flex-1 cursor-grab active:cursor-grabbing h-full flex items-center justify-center overflow-hidden"
-                        onMouseDown={e => handleMouseDown(e, stage.id, "move")}
-                      >
-                        {barStyle.width > 60 && (
-                          <span className="text-[10px] font-medium text-white/90 drop-shadow-sm truncate px-1">
-                            {stage.code}
-                          </span>
-                        )}
-                      </div>
-                      {/* Right resize handle */}
-                      <div
-                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-black/10 rounded-r-md"
-                        onMouseDown={e => handleMouseDown(e, stage.id, "end")}
-                      />
+                      {!hasChildren && (
+                        <>
+                          {/* Left resize handle */}
+                          <div
+                            className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-black/10 rounded-l-md"
+                            onMouseDown={e => handleMouseDown(e, stage.id, "start")}
+                          />
+                          {/* Center move handle */}
+                          <div
+                            className="flex-1 cursor-grab active:cursor-grabbing h-full flex items-center justify-center overflow-hidden"
+                            onMouseDown={e => handleMouseDown(e, stage.id, "move")}
+                          >
+                            {barStyle.width > 60 && (
+                              <span className="text-[10px] font-medium text-white/90 drop-shadow-sm truncate px-1">
+                                {stage.code}
+                              </span>
+                            )}
+                          </div>
+                          {/* Right resize handle */}
+                          <div
+                            className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-black/10 rounded-r-md"
+                            onMouseDown={e => handleMouseDown(e, stage.id, "end")}
+                          />
+                        </>
+                      )}
+                      {hasChildren && (
+                        <div className="flex-1 h-full flex items-center justify-center overflow-hidden">
+                          {barStyle.width > 60 && (
+                            <span className="text-[10px] font-medium text-white/90 drop-shadow-sm truncate px-1">
+                              {stage.code}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
