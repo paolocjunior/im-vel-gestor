@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import ConstructionDashboard from "@/components/construction/ConstructionDashboard";
 import ConstructionStages from "@/components/construction/ConstructionStages";
 import GanttChart from "@/components/construction/GanttChart";
+import PhysicalFinancialSchedule from "@/components/construction/PhysicalFinancialSchedule";
 
 type ViewType = "dashboard" | "stages" | "budget" | "purchase-orders" | "purchases" | "financial" | "reports" | "gantt" | "physical-financial";
 
@@ -149,6 +150,8 @@ export default function ConstructionPage() {
             onIncompleteStagesChange={setIncompleteStageNames}
           />
         );
+      case "physical-financial":
+        return <PhysicalFinancialSchedule studyId={studyId} />;
       case "gantt":
         return <GanttChart studyId={studyId} />;
       default:
