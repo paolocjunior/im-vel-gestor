@@ -528,7 +528,7 @@ export default function GanttChart({ studyId }: Props) {
             {/* Rows - synced scroll */}
             <div
               ref={sidebarScrollRef}
-              className="overflow-x-auto overflow-y-scroll flex-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="overflow-x-auto overflow-y-scroll flex-1 gantt-sidebar"
               style={{ maxHeight: visibleStages.length * ROW_HEIGHT }}
             >
               <div style={{ minWidth: SIDEBAR_WIDTH }}>
