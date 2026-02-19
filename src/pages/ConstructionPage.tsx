@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import GlobalTopbar from "@/components/GlobalTopbar";
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
-import { ChevronDown, ChevronRight, LayoutDashboard, Layers, Calculator, ShoppingCart, Package, Wallet, FileBarChart, ArrowLeft, GanttChart as GanttChartIcon, CalendarRange } from "lucide-react";
+import { ChevronDown, ChevronRight, LayoutDashboard, Layers, Calculator, ShoppingCart, Package, Wallet, FileBarChart, ArrowLeft, GanttChart as GanttChartIcon, CalendarRange, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import ConstructionDashboard from "@/components/construction/ConstructionDashboard";
 import ConstructionStages from "@/components/construction/ConstructionStages";
 import GanttChart from "@/components/construction/GanttChart";
@@ -31,6 +31,7 @@ export default function ConstructionPage() {
   const [studyName, setStudyName] = useState("");
   const [incompleteStageNames, setIncompleteStageNames] = useState<string[]>([]);
   const [pendingView, setPendingView] = useState<ViewType | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const fetchStudy = useCallback(async () => {
     if (!studyId) return;
@@ -181,70 +182,104 @@ export default function ConstructionPage() {
 
         {/* Main layout */}
         <div className="flex-1 min-h-0">
-          <ResizablePanelGroup direction="horizontal" className="rounded-xl border bg-card shadow-sm min-h-[600px]">
+          <div className="rounded-xl border bg-card shadow-sm min-h-[600px] flex">
             {/* Sidebar */}
-            <ResizablePanel defaultSize={20} minSize={14} maxSize={35}>
-              <div className="h-full flex flex-col p-3 overflow-y-auto">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 px-1">Menu</p>
-                <nav className="space-y-0.5">
+            <TooltipProvider delayDuration={0}>
+              <div
+                className={cn(
+                  "h-full flex flex-col border-r transition-all duration-200 shrink-0",
+                  sidebarCollapsed ? "w-12" : "w-56"
+                )}
+              >
+                <div className="flex items-center justify-between p-2 border-b shrink-0">
+                  {!sidebarCollapsed && (
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1">Menu</p>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                  >
+                    {sidebarCollapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <nav className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
                   {menuItems.map((item) => (
                     <div key={item.key}>
-                      <div
-                        className={cn(
-                          "flex items-center gap-2 w-full text-left py-2 px-2 rounded-lg text-sm font-medium transition-colors",
-                          activeView === item.key
-                            ? "bg-muted text-foreground"
-                            : "text-foreground hover:bg-muted/50"
-                        )}
-                      >
-                        <button
-                          className="flex items-center gap-2 flex-1 min-w-0"
-                          onClick={() => handleViewChange(item.key)}
-                        >
-                          <item.icon className="h-4 w-4 shrink-0" />
-                          <span className="truncate">{item.label}</span>
-                        </button>
-                        {item.key === "stages" && (
-                          <button
-                            className="shrink-0 p-0.5 rounded hover:bg-muted/80"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setStagesExpanded(!stagesExpanded);
-                            }}
+                      {sidebarCollapsed ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              className={cn(
+                                "flex items-center justify-center w-full p-2 rounded-lg transition-colors",
+                                activeView === item.key
+                                  ? "bg-muted text-foreground"
+                                  : "text-foreground hover:bg-muted/50"
+                              )}
+                              onClick={() => handleViewChange(item.key)}
+                            >
+                              <item.icon className="h-4 w-4 shrink-0" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">{item.label}</TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <>
+                          <div
+                            className={cn(
+                              "flex items-center gap-2 w-full text-left py-2 px-2 rounded-lg text-sm font-medium transition-colors",
+                              activeView === item.key
+                                ? "bg-muted text-foreground"
+                                : "text-foreground hover:bg-muted/50"
+                            )}
                           >
-                            {stagesExpanded
-                              ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                              : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
-                          </button>
-                        )}
-                      </div>
-                      {/* Stage tree under Etapas */}
-                      {item.key === "stages" && stagesExpanded && (
-                        <div className="mt-1 mb-1">
-                          {stageTree.length === 0 ? (
-                            <p className="text-xs text-muted-foreground px-3 py-1 italic">
-                              Nenhuma etapa criada
-                            </p>
-                          ) : (
-                            stageTree.map((n) => renderStageNode(n, 0))
+                            <button
+                              className="flex items-center gap-2 flex-1 min-w-0"
+                              onClick={() => handleViewChange(item.key)}
+                            >
+                              <item.icon className="h-4 w-4 shrink-0" />
+                              <span className="truncate">{item.label}</span>
+                            </button>
+                            {item.key === "stages" && (
+                              <button
+                                className="shrink-0 p-0.5 rounded hover:bg-muted/80"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setStagesExpanded(!stagesExpanded);
+                                }}
+                              >
+                                {stagesExpanded
+                                  ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                                  : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                              </button>
+                            )}
+                          </div>
+                          {/* Stage tree under Etapas */}
+                          {item.key === "stages" && stagesExpanded && (
+                            <div className="mt-1 mb-1">
+                              {stageTree.length === 0 ? (
+                                <p className="text-xs text-muted-foreground px-3 py-1 italic">
+                                  Nenhuma etapa criada
+                                </p>
+                              ) : (
+                                stageTree.map((n) => renderStageNode(n, 0))
+                              )}
+                            </div>
                           )}
-                        </div>
+                        </>
                       )}
                     </div>
                   ))}
                 </nav>
               </div>
-            </ResizablePanel>
-
-            <ResizableHandle withHandle />
+            </TooltipProvider>
 
             {/* Content */}
-            <ResizablePanel defaultSize={80}>
-              <div className="h-full overflow-y-auto p-4 sm:p-6">
-                {renderContent()}
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
+            <div className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6">
+              {renderContent()}
+            </div>
+          </div>
         </div>
       </div>
 
