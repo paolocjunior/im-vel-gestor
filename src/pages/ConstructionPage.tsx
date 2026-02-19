@@ -3,12 +3,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import GlobalTopbar from "@/components/GlobalTopbar";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
-import { ChevronDown, ChevronRight, LayoutDashboard, Layers, Calculator, ShoppingCart, Package, Wallet, FileBarChart, ArrowLeft, GanttChart, CalendarRange } from "lucide-react";
+import { ChevronDown, ChevronRight, LayoutDashboard, Layers, Calculator, ShoppingCart, Package, Wallet, FileBarChart, ArrowLeft, GanttChart as GanttChartIcon, CalendarRange } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import ConstructionDashboard from "@/components/construction/ConstructionDashboard";
 import ConstructionStages from "@/components/construction/ConstructionStages";
+import GanttChart from "@/components/construction/GanttChart";
 
 type ViewType = "dashboard" | "stages" | "budget" | "purchase-orders" | "purchases" | "financial" | "reports" | "gantt" | "physical-financial";
 
@@ -101,7 +102,7 @@ export default function ConstructionPage() {
   const menuItems: { key: ViewType; label: string; icon: React.ElementType }[] = [
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { key: "stages", label: "Etapas", icon: Layers },
-    { key: "gantt", label: "Cronograma de Gantt", icon: GanttChart },
+    { key: "gantt", label: "Cronograma de Gantt", icon: GanttChartIcon },
     { key: "physical-financial", label: "Cronograma Físico-Financeiro", icon: CalendarRange },
     { key: "budget", label: "Orçamento", icon: Calculator },
     { key: "purchase-orders", label: "Pedido de Compra", icon: ShoppingCart },
@@ -147,6 +148,8 @@ export default function ConstructionPage() {
             onIncompleteStagesChange={setIncompleteStageNames}
           />
         );
+      case "gantt":
+        return <GanttChart studyId={studyId} />;
       default:
         return (
           <div className="flex items-center justify-center h-64">
