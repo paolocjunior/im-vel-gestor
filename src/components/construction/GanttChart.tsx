@@ -390,6 +390,9 @@ export default function GanttChart({ studyId }: Props) {
 
     visibleStages.forEach((stage, rowIdx) => {
       if (!stage.dependency_id) return;
+      // Only draw arrows for leaf stages (non-parent) that have a dependency
+      const hasChildren = stages.some(s => s.parent_id === stage.id);
+      if (hasChildren) return;
       const depStage = stages.find(s => s.id === stage.dependency_id);
       if (!depStage) return;
       const depRowIdx = visibleStages.findIndex(s => s.id === depStage.id);
@@ -525,7 +528,7 @@ export default function GanttChart({ studyId }: Props) {
             {/* Rows - synced scroll */}
             <div
               ref={sidebarScrollRef}
-              className="overflow-x-auto overflow-y-auto flex-1"
+              className="overflow-x-auto overflow-y-scroll flex-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               style={{ maxHeight: visibleStages.length * ROW_HEIGHT }}
             >
               <div style={{ minWidth: SIDEBAR_WIDTH }}>
@@ -597,8 +600,8 @@ export default function GanttChart({ studyId }: Props) {
                   const today = todayISO();
                   if (today >= effectiveMin && today <= effectiveMax) {
                     const pxPerDay = totalChartWidth / totalTimelineDays;
-                    const x = diffDays(effectiveMin, today) * pxPerDay;
-                    return <div className="absolute top-0 bottom-0 w-0.5 bg-destructive/40 z-10" style={{ left: x }} />;
+                    const x = diffDays(effectiveMin, today) * pxPerDay + pxPerDay / 2;
+                    return <div className="absolute top-0 bottom-0 w-0.5 bg-black z-10" style={{ left: x }} />;
                   }
                   return null;
                 })()}
