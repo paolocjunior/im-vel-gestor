@@ -383,7 +383,7 @@ export default function GanttChart({ studyId }: Props) {
     };
   }, [dragging, stages, totalChartWidth, totalTimelineDays]);
 
-  // Draw dependency arrows with proper routing (down-and-around when close)
+  // Draw dependency arrows - exact routing: right, down, left, down, right to target
   const renderArrows = () => {
     const arrows: JSX.Element[] = [];
     const pxPerDay = totalChartWidth / totalTimelineDays;
@@ -395,7 +395,6 @@ export default function GanttChart({ studyId }: Props) {
       const depRowIdx = visibleStages.findIndex(s => s.id === depStage.id);
       if (depRowIdx < 0) return;
 
-      // Get effective dates for both stages (parent bars use children dates)
       const hasDepChildren = stages.some(s => s.parent_id === depStage.id);
       const depDates = hasDepChildren ? getEffectiveDates(depStage, stages) : { start: depStage.start_date, end: depStage.end_date };
       const hasStageChildren = stages.some(s => s.parent_id === stage.id);
@@ -408,21 +407,20 @@ export default function GanttChart({ studyId }: Props) {
       const depY = depRowIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
       const stageY = rowIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
 
-      // Route the arrow: go right from dep end, then down, then left to stage start
-      const gapX = 12;
-      const dropY = Math.min(depY, stageY) + ROW_HEIGHT * 0.8;
-
       let pathD: string;
-      if (stageStartX >= depEndX + 20) {
-        // Enough horizontal space - straight horizontal then vertical then horizontal
-        const midX = depEndX + gapX;
+      const gap = 12;
+
+      if (stageStartX >= depEndX + 24 && rowIdx > depRowIdx) {
+        // Enough horizontal space and target is below - simple L route
+        const midX = depEndX + gap;
         pathD = `M ${depEndX} ${depY} L ${midX} ${depY} L ${midX} ${stageY} L ${stageStartX} ${stageY}`;
       } else {
-        // Not enough space - route down and around
-        const rightX = depEndX + gapX;
-        const bottomY = Math.max(depY, stageY) + ROW_HEIGHT * 0.4;
-        const leftX = stageStartX - gapX;
-        pathD = `M ${depEndX} ${depY} L ${rightX} ${depY} L ${rightX} ${bottomY} L ${leftX} ${bottomY} L ${leftX} ${stageY} L ${stageStartX} ${stageY}`;
+        // Route: right from end → down below dep row → left past target start → down to target row → right to target start
+        const rightX = depEndX + gap;
+        const midY1 = depY + ROW_HEIGHT * 0.45; // below dep bar
+        const leftX = stageStartX - gap;
+        const midY2 = stageY; // target row center
+        pathD = `M ${depEndX} ${depY} L ${rightX} ${depY} L ${rightX} ${midY1} L ${leftX} ${midY1} L ${leftX} ${midY2} L ${stageStartX} ${midY2}`;
       }
 
       arrows.push(
