@@ -667,7 +667,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
         <div
           className={cn(
             "flex items-center gap-1.5 py-2 px-2 border-b border-border/50 hover:brightness-95 transition-all",
-            depth === 0 && "font-semibold"
+            stage.level === 0 && "font-semibold"
           )}
           style={{ paddingLeft: `${depth * 20 + 8}px`, backgroundColor: bgColor }}
         >
@@ -687,7 +687,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
           </div>
 
           {/* Fixed columns */}
-          <div className={cn("flex items-center gap-0.5 shrink-0 ml-4", depth === 0 ? "text-sm" : "text-xs")}>
+          <div className={cn("flex items-center gap-0.5 shrink-0 ml-4", stage.level === 0 ? "text-sm" : "text-xs")}>
             {isLeaf ? (
               <>
                 {/* Unidade - click to edit */}
