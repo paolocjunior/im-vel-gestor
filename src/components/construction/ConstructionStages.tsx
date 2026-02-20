@@ -681,13 +681,13 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
           {/* Name with horizontal scroll */}
           <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
-            <span className={cn("whitespace-nowrap", depth === 0 ? "text-base font-semibold" : "text-sm")} >
+            <span className="text-sm whitespace-nowrap">
               {stage.code} - {stage.name}
             </span>
           </div>
 
           {/* Fixed columns */}
-          <div className="flex items-center gap-1 shrink-0 ml-3">
+          <div className={cn("flex items-center gap-0.5 shrink-0 ml-4", depth === 0 && "text-sm")}>
             {isLeaf ? (
               <>
                 {/* Unidade - click to edit */}
@@ -833,7 +833,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                 <div className="w-16 h-8" />
                 <div className="w-24 h-8" />
                 {/* V. Total for parent */}
-                <div className="w-24 h-8 flex items-center justify-end text-xs px-1">
+                <div className="w-24 h-8 flex items-center justify-end px-1">
                   <span className="text-foreground/80 font-medium">
                     {stageTotalValue > 0 ? formatBRNumber(stageTotalValue) : "—"}
                   </span>
@@ -991,7 +991,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       <div className="card-dashboard p-0 overflow-hidden">
         <div className="flex items-center px-4 py-3 bg-muted/30 border-b">
           <span className="text-sm font-semibold text-foreground flex-1 min-w-0">Etapas</span>
-          <div className="flex items-center gap-1 shrink-0 ml-3">
+          <div className="flex items-center gap-0.5 shrink-0 ml-4">
             <span className="text-xs text-muted-foreground w-16 text-center">Unidade</span>
             <span className="text-xs text-muted-foreground w-16 text-right">Qtde.</span>
             <span className="text-xs text-muted-foreground w-24 text-right">V. Unit.</span>
