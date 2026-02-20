@@ -345,8 +345,12 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                 const isRoot = !stage.parent_id;
                 const peso = isRoot && grandTotal > 0 && stageTotal > 0 ? (stageTotal / grandTotal) * 100 : null;
 
-                const plannedDuration = stage.start_date && stage.end_date
-                  ? diffDays(stage.start_date, stage.end_date) + 1
+                const plannedDates = hasChildren
+                  ? getEffectiveDates(stage, stages)
+                  : { start: stage.start_date, end: stage.end_date };
+
+                const plannedDuration = plannedDates.start && plannedDates.end
+                  ? diffDays(plannedDates.start, plannedDates.end) + 1
                   : null;
 
                 const actualDates = hasChildren
@@ -392,11 +396,11 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                     </td>
                     {/* Data Inicial */}
                     <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 85 }}>
-                      {stage.start_date ? formatDateBR(stage.start_date) : "-"}
+                      {plannedDates.start ? formatDateBR(plannedDates.start) : "-"}
                     </td>
                     {/* Data Final */}
                     <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 85 }}>
-                      {stage.end_date ? formatDateBR(stage.end_date) : "-"}
+                      {plannedDates.end ? formatDateBR(plannedDates.end) : "-"}
                     </td>
                     {/* Duração planejada */}
                     <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 70 }}>
