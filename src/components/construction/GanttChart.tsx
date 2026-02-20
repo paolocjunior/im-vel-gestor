@@ -390,9 +390,6 @@ export default function GanttChart({ studyId }: Props) {
 
     visibleStages.forEach((stage, rowIdx) => {
       if (!stage.dependency_id) return;
-      // Only draw arrows for leaf stages (non-parent) that have a dependency
-      const hasChildren = stages.some(s => s.parent_id === stage.id);
-      if (hasChildren) return;
       const depStage = stages.find(s => s.id === stage.dependency_id);
       if (!depStage) return;
       const depRowIdx = visibleStages.findIndex(s => s.id === depStage.id);
