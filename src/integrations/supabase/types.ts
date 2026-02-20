@@ -216,8 +216,55 @@ export type Database = {
           },
         ]
       }
+      construction_stage_monthly_values: {
+        Row: {
+          created_at: string
+          id: string
+          month_key: string
+          stage_id: string
+          study_id: string
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          month_key: string
+          stage_id: string
+          study_id: string
+          updated_at?: string
+          value?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          month_key?: string
+          stage_id?: string
+          study_id?: string
+          updated_at?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "construction_stage_monthly_values_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "construction_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "construction_stage_monthly_values_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       construction_stages: {
         Row: {
+          actual_end_date: string | null
+          actual_start_date: string | null
           area_m2: number
           catalog_id: string | null
           code: string
@@ -240,6 +287,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          actual_end_date?: string | null
+          actual_start_date?: string | null
           area_m2?: number
           catalog_id?: string | null
           code: string
@@ -262,6 +311,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          actual_end_date?: string | null
+          actual_start_date?: string | null
           area_m2?: number
           catalog_id?: string | null
           code?: string
