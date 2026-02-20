@@ -163,12 +163,17 @@ export default function ConstructionPage() {
     }
   }
 
+  const isFullWidthView = activeView === "physical-financial" || activeView === "gantt";
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <GlobalTopbar />
-      <div className="max-w-[1440px] w-full mx-auto px-4 sm:px-6 py-4 flex-1 flex flex-col">
+      <div className={cn(
+        "w-full mx-auto px-2 sm:px-4 py-2 flex-1 flex flex-col",
+        isFullWidthView ? "" : "max-w-[1440px] px-4 sm:px-6 py-4"
+      )}>
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-2">
           <div>
             <h1 className="text-xl font-bold text-foreground">Obras / Construção</h1>
             {studyName && <p className="text-sm text-muted-foreground">{studyName}</p>}
@@ -185,7 +190,10 @@ export default function ConstructionPage() {
 
         {/* Main layout */}
         <div className="flex-1 min-h-0">
-          <div className="rounded-xl border bg-card shadow-sm min-h-[600px] flex">
+          <div className={cn(
+            "rounded-xl border bg-card shadow-sm flex",
+            isFullWidthView ? "min-h-[calc(100vh-120px)]" : "min-h-[600px]"
+          )}>
             {/* Sidebar */}
             <TooltipProvider delayDuration={0}>
               <div
@@ -279,7 +287,10 @@ export default function ConstructionPage() {
             </TooltipProvider>
 
             {/* Content */}
-            <div className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6">
+            <div className={cn(
+              "flex-1 min-w-0 overflow-y-auto",
+              isFullWidthView ? "p-2 sm:p-3" : "p-4 sm:p-6"
+            )}>
               {renderContent()}
             </div>
           </div>
