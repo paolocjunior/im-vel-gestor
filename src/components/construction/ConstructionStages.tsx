@@ -687,7 +687,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
           </div>
 
           {/* Fixed columns */}
-          <div className={cn("flex items-center gap-0.5 shrink-0 ml-4", depth === 0 && "text-sm")}>
+          <div className={cn("flex items-center gap-0.5 shrink-0 ml-4", depth === 0 ? "text-sm" : "text-xs")}>
             {isLeaf ? (
               <>
                 {/* Unidade - click to edit */}
