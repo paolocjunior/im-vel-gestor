@@ -581,7 +581,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     if (!isEditing) {
       return (
         <div
-          className={cn("h-8 flex items-center justify-end text-xs cursor-pointer rounded px-1 hover:bg-background/60 transition-colors", width)}
+          className={cn("h-8 flex items-center justify-end cursor-pointer rounded px-1 hover:bg-background/60 transition-colors", width)}
           onClick={() => setEditingField(fieldKey)}
         >
           <span className={cn("text-foreground/80", !value && "text-muted-foreground/50")}>
@@ -595,7 +595,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       <MaskedNumberInput
         id={fieldKey}
         autoFocus
-        className={cn("h-8 text-xs text-right", width)}
+        className={cn("h-8 text-right", width)}
         value={value}
         onValueChange={onCommit}
         decimals={decimals}
@@ -707,7 +707,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                   </Select>
                 ) : (
                   <div
-                    className="w-16 h-8 flex items-center justify-center text-xs cursor-pointer rounded px-1 hover:bg-background/60 transition-colors"
+                    className="w-16 h-8 flex items-center justify-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors"
                     onClick={() => setEditingField(`unit-${stage.id}`)}
                   >
                     <span className={cn("text-foreground/80", !unit && "text-muted-foreground/50")}>
@@ -739,7 +739,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                 />
 
                 {/* V. Total - read only, inline display */}
-                <div className="w-24 h-8 flex items-center justify-end text-xs px-1">
+                <div className="w-24 h-8 flex items-center justify-end px-1">
                   <span className="text-foreground/80 font-medium">
                     {stageTotalValue > 0 ? formatBRNumber(stageTotalValue) : "—"}
                   </span>
@@ -766,7 +766,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                     </Select>
                   ) : (
                     <div
-                      className="w-20 h-8 flex items-center justify-center text-xs cursor-pointer rounded px-1 hover:bg-background/60 transition-colors"
+                    className="w-20 h-8 flex items-center justify-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors"
                       onClick={() => setEditingField(`dep-${stage.id}`)}
                     >
                       <span className={cn("text-foreground/80", !depStage && "text-muted-foreground/50")}>
@@ -783,7 +783,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                   <DateRangePicker stage={stage} autoOpen onClose={() => setEditingField(null)} />
                 ) : (
                   <div
-                    className="w-[120px] h-8 flex items-center text-xs cursor-pointer rounded px-1 hover:bg-background/60 transition-colors gap-1"
+                    className="w-[120px] h-8 flex items-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors gap-1"
                     onClick={() => setEditingField(`period-${stage.id}`)}
                   >
                     <CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -819,7 +819,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                   </Select>
                 ) : (
                   <div
-                    className={cn("w-[110px] h-8 flex items-center justify-center text-xs cursor-pointer rounded px-1 transition-colors", getStatusBg(stage.status))}
+                    className={cn("w-[110px] h-8 flex items-center justify-center cursor-pointer rounded px-1 transition-colors", getStatusBg(stage.status))}
                     onClick={() => setEditingField(`status-${stage.id}`)}
                   >
                     {getStatusLabel(stage.status)}
@@ -860,7 +860,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                     </Select>
                   ) : (
                     <div
-                      className="w-20 h-8 flex items-center justify-center text-xs cursor-pointer rounded px-1 hover:bg-background/60 transition-colors"
+                      className="w-20 h-8 flex items-center justify-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors"
                       onClick={() => setEditingField(`dep-${stage.id}`)}
                     >
                       <span className={cn("text-foreground/80", !depStage && "text-muted-foreground/50")}>
@@ -874,7 +874,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
                 {/* Período for parent - show computed period when collapsed */}
                 {!isExpanded && stagePeriod && (stagePeriod.minDate || stagePeriod.maxDate) ? (
-                  <div className="w-[120px] h-8 flex items-center text-xs text-muted-foreground px-1 gap-1">
+                  <div className="w-[120px] h-8 flex items-center text-muted-foreground px-1 gap-1">
                     <CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                     <span className="truncate">
                       {stagePeriod.minDate ? formatDateShort(stagePeriod.minDate) : "?"}-{stagePeriod.maxDate ? formatDateShort(stagePeriod.maxDate) : "?"}
@@ -910,7 +910,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                   </Select>
                 ) : (
                   <div
-                    className={cn("w-[110px] h-8 flex items-center justify-center text-xs cursor-pointer rounded px-1 transition-colors", getStatusBg(stage.status))}
+                    className={cn("w-[110px] h-8 flex items-center justify-center cursor-pointer rounded px-1 transition-colors", getStatusBg(stage.status))}
                     onClick={() => setEditingField(`status-${stage.id}`)}
                   >
                     {getStatusLabel(stage.status)}
