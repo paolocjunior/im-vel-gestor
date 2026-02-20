@@ -579,6 +579,22 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
     const stageTotalValue = getDeepTotal(stage);
 
+    // Compute effective period for macro stages from all descendants
+    const getDeepPeriod = (s: StageRow): { minDate: string | null; maxDate: string | null } => {
+      const stageChildren = stages.filter(child => child.parent_id === s.id);
+      if (stageChildren.length === 0) return { minDate: s.start_date, maxDate: s.end_date };
+      let minD: string | null = null;
+      let maxD: string | null = null;
+      for (const child of stageChildren) {
+        const childPeriod = getDeepPeriod(child);
+        if (childPeriod.minDate && (!minD || childPeriod.minDate < minD)) minD = childPeriod.minDate;
+        if (childPeriod.maxDate && (!maxD || childPeriod.maxDate > maxD)) maxD = childPeriod.maxDate;
+      }
+      return { minDate: minD, maxDate: maxD };
+    };
+
+    const stagePeriod = hasChildren ? getDeepPeriod(stage) : null;
+
     const siblings = stages.filter(s => s.parent_id === stage.parent_id).sort((a, b) => a.position - b.position);
     const siblingIdx = siblings.findIndex(s => s.id === stage.id);
     const canMoveUp = siblingIdx > 0;
@@ -735,8 +751,16 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
                   <div className="w-20 h-8" />
                 )}
 
-                {/* Período spacer for parent */}
-                <div className="w-[120px] h-8" />
+                {/* Período for parent - show computed period when collapsed */}
+                {!isExpanded && stagePeriod && (stagePeriod.minDate || stagePeriod.maxDate) ? (
+                  <div className="w-[120px] h-8 flex items-center text-xs text-muted-foreground px-1">
+                    <span className="truncate">
+                      {stagePeriod.minDate ? formatDateShort(stagePeriod.minDate) : "?"}-{stagePeriod.maxDate ? formatDateShort(stagePeriod.maxDate) : "?"}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="w-[120px] h-8" />
+                )}
 
                 {/* Status for parent */}
                 <Select value={stage.status || "pending"} onValueChange={(v) => handleFieldChange(stage.id, "status", v)}>

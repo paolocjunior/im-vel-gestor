@@ -244,10 +244,10 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
       .reduce((sum, s) => sum + getStageGroupValue(s.id, monthKeys), 0);
   };
 
-  // Solid bg for sticky cells based on row
+  // Solid bg for sticky cells - MUST be fully opaque to prevent text overlap on scroll
   const stickyBg = (i: number, hasChildren: boolean) => {
-    if (hasChildren) return "bg-muted/95";
-    return i % 2 === 0 ? "bg-background" : "bg-muted/5";
+    if (hasChildren) return "bg-muted";
+    return "bg-background";
   };
 
   return (
@@ -309,12 +309,12 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                 <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 260, minWidth: 90 }}>Previsto</th>
                 <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 350, minWidth: 90 }}>Realizado</th>
                 <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 440, minWidth: 80 }}>Real x Prev</th>
-                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 520, minWidth: 85 }}>Data Inicial</th>
-                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 605, minWidth: 85 }}>Data Final</th>
-                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 690, minWidth: 70 }}>Duração</th>
-                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 760, minWidth: 110 }}>Início Etapa</th>
-                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 870, minWidth: 110 }}>Término Etapa</th>
-                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 980, minWidth: 70 }}>Duração</th>
+                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 85 }}>Data Inicial</th>
+                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 85 }}>Data Final</th>
+                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 70 }}>Duração</th>
+                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 110 }}>Início Etapa</th>
+                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 110 }}>Término Etapa</th>
+                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 70 }}>Duração</th>
                 {groupedColumns.map(col => (
                   <th key={col.key} className="bg-muted border-b border-r px-1 text-center font-medium text-muted-foreground whitespace-nowrap" style={{ minWidth: COL_WIDTH_MONTH }}>
                     {col.label}
@@ -345,8 +345,8 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                   ? diffDays(actualDates.start, actualDates.end) + 1
                   : null;
 
-                const rowBg = hasChildren ? "bg-muted/40" : (i % 2 === 0 ? "bg-background" : "bg-muted/5");
-                const cellStickyBg = hasChildren ? "bg-muted/95" : (i % 2 === 0 ? "bg-background" : "bg-[hsl(var(--muted)/0.05)]");
+                const rowBg = hasChildren ? "bg-muted/80" : "bg-background";
+                const cellStickyBg = hasChildren ? "bg-muted" : "bg-background";
                 const fontSize = getFontSize(stage.level);
 
                 return (
@@ -378,20 +378,20 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                     <td className={cn("sticky z-10 border-r px-1 text-center", cellStickyBg, fontSize, realVsPrev > 100 ? "text-destructive" : "text-foreground/70")} style={{ left: 440, minWidth: 80 }}>
                       {stageTotal > 0 ? fmtPercent(realVsPrev) : "-"}
                     </td>
-                    {/* Data Inicial - sticky */}
-                    <td className={cn("sticky z-10 border-r px-1 text-center text-foreground/70", cellStickyBg, fontSize)} style={{ left: 520, minWidth: 85 }}>
+                    {/* Data Inicial */}
+                    <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 85 }}>
                       {stage.start_date ? formatDateBR(stage.start_date) : "-"}
                     </td>
-                    {/* Data Final - sticky */}
-                    <td className={cn("sticky z-10 border-r px-1 text-center text-foreground/70", cellStickyBg, fontSize)} style={{ left: 605, minWidth: 85 }}>
+                    {/* Data Final */}
+                    <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 85 }}>
                       {stage.end_date ? formatDateBR(stage.end_date) : "-"}
                     </td>
-                    {/* Duração planejada - sticky */}
-                    <td className={cn("sticky z-10 border-r px-1 text-center text-foreground/70", cellStickyBg, fontSize)} style={{ left: 690, minWidth: 70 }}>
+                    {/* Duração planejada */}
+                    <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 70 }}>
                       {plannedDuration !== null ? `${plannedDuration} dias` : "-"}
                     </td>
-                    {/* Início da Etapa - sticky */}
-                    <td className={cn("sticky z-10 border-r px-1 text-center", cellStickyBg, fontSize)} style={{ left: 760, minWidth: 110 }}>
+                    {/* Início da Etapa */}
+                    <td className={cn("border-r px-1 text-center", fontSize)} style={{ minWidth: 110 }}>
                       {hasChildren ? (
                         <span className="text-foreground/70">{actualDates.start ? formatDateBR(actualDates.start) : "-"}</span>
                       ) : (
@@ -401,8 +401,8 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                         />
                       )}
                     </td>
-                    {/* Término da Etapa - sticky */}
-                    <td className={cn("sticky z-10 border-r px-1 text-center", cellStickyBg, fontSize)} style={{ left: 870, minWidth: 110 }}>
+                    {/* Término da Etapa */}
+                    <td className={cn("border-r px-1 text-center", fontSize)} style={{ minWidth: 110 }}>
                       {hasChildren ? (
                         <span className="text-foreground/70">{actualDates.end ? formatDateBR(actualDates.end) : "-"}</span>
                       ) : (
@@ -412,8 +412,8 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                         />
                       )}
                     </td>
-                    {/* Duração real - sticky */}
-                    <td className={cn("sticky z-10 border-r px-1 text-center text-foreground/70", cellStickyBg, fontSize)} style={{ left: 980, minWidth: 70 }}>
+                    {/* Duração real */}
+                    <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 70 }}>
                       {actualDuration !== null ? `${actualDuration} dias` : "-"}
                     </td>
                     {/* Month cells - NOT sticky, scroll normally */}
@@ -473,12 +473,12 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                   {(() => { const total = stages.filter(s => !stages.some(c => c.parent_id === s.id)).reduce((sum, s) => sum + getRealizado(s.id), 0); return total > 0 ? `R$ ${fmt(total)}` : "-"; })()}
                 </td>
                 <td className="sticky z-10 bg-muted border-r" style={{ left: 440 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 520 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 605 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 690 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 760 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 870 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 980 }} />
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r" />
                 {groupedColumns.map(col => {
                   const total = getFooterGroupTotal(col.monthKeys);
                   return (
@@ -501,12 +501,12 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                 <td className="sticky z-10 bg-muted border-r" style={{ left: 260 }} />
                 <td className="sticky z-10 bg-muted border-r" style={{ left: 350 }} />
                 <td className="sticky z-10 bg-muted border-r" style={{ left: 440 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 520 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 605 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 690 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 760 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 870 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 980 }} />
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r" />
                 {(() => {
                   let running = 0;
                   return groupedColumns.map(col => {
