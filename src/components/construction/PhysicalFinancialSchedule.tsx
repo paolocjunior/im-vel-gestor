@@ -1,18 +1,16 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { ChevronDown, ChevronRight, CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRNumber } from "@/components/ui/masked-number-input";
-import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  StageRow, Granularity, generateMonthColumns, groupColumns,
+  StageRow, generateMonthColumns, groupColumns,
   getEffectiveDates, todayISO, addDays, formatDateBR, diffDays, getStageTotalValue
 } from "./schedule/scheduleUtils";
 
@@ -27,14 +25,9 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
   const [periodEnd, setPeriodEnd] = useState("");
   const [selectedStageIds, setSelectedStageIds] = useState<Set<string>>(new Set());
   const [filterApplied, setFilterApplied] = useState(false);
-  const [granularity, setGranularity] = useState<Granularity>("monthly");
-  // Monthly values: Map<stageId, Map<monthKey, value>>
   const [monthlyValues, setMonthlyValues] = useState<Map<string, Map<string, number>>>(new Map());
   const [editingCell, setEditingCell] = useState<{ stageId: string; colKey: string } | null>(null);
   const [editValue, setEditValue] = useState("");
-
-  const sidebarRef = useRef<HTMLDivElement>(null);
-  const tableRef = useRef<HTMLDivElement>(null);
 
   const fetchStages = useCallback(async () => {
     const { data } = await supabase
@@ -63,24 +56,10 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
 
   useEffect(() => { fetchStages(); fetchMonthlyValues(); }, [fetchStages, fetchMonthlyValues]);
 
-  // Auto-expand roots
   useEffect(() => {
     const roots = stages.filter(s => !s.parent_id);
     setExpanded(new Set(roots.map(s => s.id)));
   }, [stages.length]);
-
-  // Sync vertical scroll
-  useEffect(() => {
-    const sidebar = sidebarRef.current;
-    const table = tableRef.current;
-    if (!sidebar || !table) return;
-    let syncing = false;
-    const syncA = () => { if (!syncing) { syncing = true; table.scrollTop = sidebar.scrollTop; syncing = false; } };
-    const syncB = () => { if (!syncing) { syncing = true; sidebar.scrollTop = table.scrollTop; syncing = false; } };
-    sidebar.addEventListener("scroll", syncA);
-    table.addEventListener("scroll", syncB);
-    return () => { sidebar.removeEventListener("scroll", syncA); table.removeEventListener("scroll", syncB); };
-  }, []);
 
   const rootStages = stages.filter(s => !s.parent_id);
 
@@ -125,29 +104,25 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
   const effectiveMax = periodEnd || globalMax;
 
   const monthColumns = useMemo(() => generateMonthColumns(effectiveMin, effectiveMax), [effectiveMin, effectiveMax]);
-  const groupedColumns = useMemo(() => groupColumns(monthColumns, granularity), [monthColumns, granularity]);
+  const groupedColumns = useMemo(() => groupColumns(monthColumns, "monthly"), [monthColumns]);
 
-  // Grand total (leaves only)
   const grandTotal = stages.reduce((sum, s) => {
     const hasChildren = stages.some(c => c.parent_id === s.id);
     return sum + (hasChildren ? 0 : Number(s.total_value) || 0);
   }, 0);
 
-  // Get monthly value for a stage + group of month keys
   const getStageGroupValue = (stageId: string, monthKeys: string[]): number => {
     const stageMap = monthlyValues.get(stageId);
     if (!stageMap) return 0;
     return monthKeys.reduce((sum, mk) => sum + (stageMap.get(mk) || 0), 0);
   };
 
-  // Get aggregated value for parent stages (sum children)
   const getAggregatedGroupValue = useCallback((stageId: string, monthKeys: string[]): number => {
     const children = stages.filter(s => s.parent_id === stageId);
     if (children.length === 0) return getStageGroupValue(stageId, monthKeys);
     return children.reduce((sum, c) => sum + getAggregatedGroupValue(c.id, monthKeys), 0);
   }, [stages, monthlyValues]);
 
-  // Realizado = sum of all monthly values for a stage
   const getRealizado = useCallback((stageId: string): number => {
     const children = stages.filter(s => s.parent_id === stageId);
     if (children.length === 0) {
@@ -159,6 +134,23 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
     }
     return children.reduce((sum, c) => sum + getRealizado(c.id), 0);
   }, [stages, monthlyValues]);
+
+  // Compute actual dates for macro stages from children
+  const getComputedActualDates = useCallback((stageId: string): { start: string | null; end: string | null } => {
+    const children = stages.filter(s => s.parent_id === stageId);
+    if (children.length === 0) {
+      const st = stages.find(s => s.id === stageId);
+      return { start: st?.actual_start_date || null, end: st?.actual_end_date || null };
+    }
+    let minStart: string | null = null;
+    let maxEnd: string | null = null;
+    for (const child of children) {
+      const childDates = getComputedActualDates(child.id);
+      if (childDates.start && (!minStart || childDates.start < minStart)) minStart = childDates.start;
+      if (childDates.end && (!maxEnd || childDates.end > maxEnd)) maxEnd = childDates.end;
+    }
+    return { start: minStart, end: maxEnd };
+  }, [stages]);
 
   const toggleExpand = (id: string) => {
     setExpanded(prev => {
@@ -184,11 +176,8 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
     setFilterApplied(false);
   };
 
-  // Save monthly value
   const saveMonthlyValue = async (stageId: string, monthKey: string, value: number) => {
-    // For grouped columns (biweekly), monthKey might contain Q1/Q2 suffix - use base month
     const baseMonthKey = monthKey.replace(/-Q[12]$/, "");
-
     const { data: existing } = await supabase
       .from("construction_stage_monthly_values" as any)
       .select("id")
@@ -209,7 +198,6 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
     fetchMonthlyValues();
   };
 
-  // Save actual dates
   const saveActualDate = async (stageId: string, field: "actual_start_date" | "actual_end_date", date: Date | undefined) => {
     const value = date ? date.toISOString().slice(0, 10) : null;
     await supabase
@@ -219,9 +207,9 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
     fetchStages();
   };
 
-  const handleCellDoubleClick = (stageId: string, colKey: string, monthKeys: string[]) => {
+  const handleCellClick = (stageId: string, colKey: string, monthKeys: string[]) => {
     const hasChildren = stages.some(s => s.parent_id === stageId);
-    if (hasChildren) return; // Only leaves are editable
+    if (hasChildren) return;
     const currentVal = getStageGroupValue(stageId, monthKeys);
     setEditingCell({ stageId, colKey });
     setEditValue(currentVal > 0 ? String(currentVal) : "");
@@ -230,7 +218,6 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
   const commitEdit = () => {
     if (!editingCell) return;
     const numVal = parseFloat(editValue.replace(/\./g, "").replace(",", ".")) || 0;
-    // For grouped columns, save to the first month key
     const group = groupedColumns.find(g => g.key === editingCell.colKey);
     if (group && group.monthKeys.length > 0) {
       saveMonthlyValue(editingCell.stageId, group.monthKeys[0], numVal);
@@ -242,15 +229,25 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
   const fmt = (v: number) => formatBRNumber(v);
   const fmtPercent = (v: number) => `${formatBRNumber(v)}%`;
 
-  const ROW_HEIGHT = 48;
   const COL_WIDTH_MONTH = 120;
-  const FIXED_COLS_WIDTH = 1100; // Total width for fixed columns
 
-  // Footer totals per grouped column
+  // Font size by level
+  const getFontSize = (level: number) => {
+    if (level === 0) return "text-sm";
+    if (level === 1) return "text-xs";
+    return "text-[11px]";
+  };
+
   const getFooterGroupTotal = (monthKeys: string[]): number => {
     return stages
-      .filter(s => !stages.some(c => c.parent_id === s.id)) // leaves only
+      .filter(s => !stages.some(c => c.parent_id === s.id))
       .reduce((sum, s) => sum + getStageGroupValue(s.id, monthKeys), 0);
+  };
+
+  // Solid bg for sticky cells based on row
+  const stickyBg = (i: number, hasChildren: boolean) => {
+    if (hasChildren) return "bg-muted/95";
+    return i % 2 === 0 ? "bg-background" : "bg-muted/5";
   };
 
   return (
@@ -274,26 +271,11 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
       </div>
 
       {/* Filters */}
-      <div className="rounded-xl border p-3 bg-card shadow-sm space-y-2">
+      <div className="rounded-xl border p-3 bg-card shadow-sm">
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-sm font-medium">Período:</span>
           <Input type="date" className="w-36 h-8 text-xs" value={periodStart} onChange={e => setPeriodStart(e.target.value)} />
           <Input type="date" className="w-36 h-8 text-xs" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)} />
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-medium">Granularidade:</span>
-          <Select value={granularity} onValueChange={(v) => setGranularity(v as Granularity)}>
-            <SelectTrigger className="w-36 h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="biweekly">Quinzenal</SelectItem>
-              <SelectItem value="monthly">Mensal</SelectItem>
-              <SelectItem value="quarterly">Trimestral</SelectItem>
-              <SelectItem value="semiannual">Semestral</SelectItem>
-              <SelectItem value="annual">Anual</SelectItem>
-            </SelectContent>
-          </Select>
 
           <Popover>
             <PopoverTrigger asChild>
@@ -319,22 +301,22 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
       {/* Table */}
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
         <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 280px)" }}>
-          <table className="border-collapse text-xs" style={{ minWidth: FIXED_COLS_WIDTH + groupedColumns.length * COL_WIDTH_MONTH }}>
-            <thead className="sticky top-0 z-20 bg-muted/50">
+          <table className="border-collapse text-xs w-max">
+            <thead className="sticky top-0 z-20">
               <tr>
-                <th className="sticky left-0 z-30 bg-muted/80 border-b border-r px-2 text-left font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap" style={{ minWidth: 200 }}>Etapas</th>
-                <th className="border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 60 }}>Peso</th>
-                <th className="border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 90 }}>Previsto</th>
-                <th className="border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 90 }}>Realizado</th>
-                <th className="border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 80 }}>Real x Prev</th>
-                <th className="border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 85 }}>Data Inicial</th>
-                <th className="border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 85 }}>Data Final</th>
-                <th className="border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 70 }}>Duração</th>
-                <th className="border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 110 }}>Início Etapa</th>
-                <th className="border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 110 }}>Término Etapa</th>
-                <th className="border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 70 }}>Duração</th>
+                <th className="sticky left-0 z-30 bg-muted border-b border-r px-2 text-left font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap" style={{ minWidth: 200 }}>Etapas</th>
+                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 200, minWidth: 60 }}>Peso</th>
+                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 260, minWidth: 90 }}>Previsto</th>
+                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 350, minWidth: 90 }}>Realizado</th>
+                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 440, minWidth: 80 }}>Real x Prev</th>
+                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 520, minWidth: 85 }}>Data Inicial</th>
+                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 605, minWidth: 85 }}>Data Final</th>
+                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 690, minWidth: 70 }}>Duração</th>
+                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 760, minWidth: 110 }}>Início Etapa</th>
+                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 870, minWidth: 110 }}>Término Etapa</th>
+                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 980, minWidth: 70 }}>Duração</th>
                 {groupedColumns.map(col => (
-                  <th key={col.key} className="border-b border-r px-1 text-center font-medium text-muted-foreground whitespace-nowrap" style={{ minWidth: COL_WIDTH_MONTH }}>
+                  <th key={col.key} className="bg-muted border-b border-r px-1 text-center font-medium text-muted-foreground whitespace-nowrap" style={{ minWidth: COL_WIDTH_MONTH }}>
                     {col.label}
                   </th>
                 ))}
@@ -348,28 +330,29 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                 const realizado = getRealizado(stage.id);
                 const realVsPrev = stageTotal > 0 ? (realizado / stageTotal) * 100 : 0;
                 const isRoot = !stage.parent_id;
-
-                // Peso: only for root/macro stages, and only if they have value
                 const peso = isRoot && grandTotal > 0 && stageTotal > 0 ? (stageTotal / grandTotal) * 100 : null;
 
-                // Duração planejada
                 const plannedDuration = stage.start_date && stage.end_date
                   ? diffDays(stage.start_date, stage.end_date) + 1
                   : null;
 
-                // Duração real
-                const actualDuration = stage.actual_start_date && stage.actual_end_date
-                  ? diffDays(stage.actual_start_date, stage.actual_end_date) + 1
+                // For macro stages, compute actual dates from children; for leaves, use own
+                const actualDates = hasChildren
+                  ? getComputedActualDates(stage.id)
+                  : { start: stage.actual_start_date, end: stage.actual_end_date };
+
+                const actualDuration = actualDates.start && actualDates.end
+                  ? diffDays(actualDates.start, actualDates.end) + 1
                   : null;
 
+                const rowBg = hasChildren ? "bg-muted/40" : (i % 2 === 0 ? "bg-background" : "bg-muted/5");
+                const cellStickyBg = hasChildren ? "bg-muted/95" : (i % 2 === 0 ? "bg-background" : "bg-[hsl(var(--muted)/0.05)]");
+                const fontSize = getFontSize(stage.level);
+
                 return (
-                  <tr key={stage.id} className={cn(
-                    "border-b hover:bg-muted/20 transition-colors",
-                    i % 2 === 0 ? "bg-background" : "bg-muted/5",
-                    hasChildren ? "bg-muted/15 font-semibold" : ""
-                  )}>
-                    {/* Etapa name */}
-                    <td className="sticky left-0 z-10 bg-inherit border-r px-1 whitespace-nowrap" style={{ paddingLeft: `${stage.level * 16 + 8}px` }}>
+                  <tr key={stage.id} className={cn("border-b hover:bg-muted/20 transition-colors", rowBg)}>
+                    {/* Etapa name - sticky */}
+                    <td className={cn("sticky left-0 z-10 border-r px-1 whitespace-nowrap", cellStickyBg, fontSize, hasChildren && "font-semibold")} style={{ paddingLeft: `${stage.level * 16 + 8}px`, minWidth: 200 }}>
                       <div className="flex items-center gap-1">
                         {hasChildren ? (
                           <button onClick={() => toggleExpand(stage.id)} className="p-0.5 rounded hover:bg-muted">
@@ -379,53 +362,61 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                         <span className="text-foreground/80 truncate max-w-[160px]">{stage.code} - {stage.name}</span>
                       </div>
                     </td>
-                    {/* Peso */}
-                    <td className="border-r px-1 text-center text-foreground/70">
+                    {/* Peso - sticky */}
+                    <td className={cn("sticky z-10 border-r px-1 text-center text-foreground/70", cellStickyBg, fontSize)} style={{ left: 200, minWidth: 60 }}>
                       {peso !== null ? fmtPercent(peso) : "-"}
                     </td>
-                    {/* Previsto */}
-                    <td className="border-r px-1 text-right text-foreground/80 whitespace-nowrap">
+                    {/* Previsto - sticky */}
+                    <td className={cn("sticky z-10 border-r px-1 text-right text-foreground/80 whitespace-nowrap", cellStickyBg, fontSize)} style={{ left: 260, minWidth: 90 }}>
                       {stageTotal > 0 ? `R$ ${fmt(stageTotal)}` : "-"}
                     </td>
-                    {/* Realizado */}
-                    <td className="border-r px-1 text-right text-foreground/80 whitespace-nowrap">
+                    {/* Realizado - sticky */}
+                    <td className={cn("sticky z-10 border-r px-1 text-right text-foreground/80 whitespace-nowrap", cellStickyBg, fontSize)} style={{ left: 350, minWidth: 90 }}>
                       {realizado > 0 ? `R$ ${fmt(realizado)}` : "-"}
                     </td>
-                    {/* Real x Previsto */}
-                    <td className={cn("border-r px-1 text-center", realVsPrev > 100 ? "text-destructive" : "text-foreground/70")}>
+                    {/* Real x Previsto - sticky */}
+                    <td className={cn("sticky z-10 border-r px-1 text-center", cellStickyBg, fontSize, realVsPrev > 100 ? "text-destructive" : "text-foreground/70")} style={{ left: 440, minWidth: 80 }}>
                       {stageTotal > 0 ? fmtPercent(realVsPrev) : "-"}
                     </td>
-                    {/* Data Inicial */}
-                    <td className="border-r px-1 text-center text-foreground/70">
+                    {/* Data Inicial - sticky */}
+                    <td className={cn("sticky z-10 border-r px-1 text-center text-foreground/70", cellStickyBg, fontSize)} style={{ left: 520, minWidth: 85 }}>
                       {stage.start_date ? formatDateBR(stage.start_date) : "-"}
                     </td>
-                    {/* Data Final */}
-                    <td className="border-r px-1 text-center text-foreground/70">
+                    {/* Data Final - sticky */}
+                    <td className={cn("sticky z-10 border-r px-1 text-center text-foreground/70", cellStickyBg, fontSize)} style={{ left: 605, minWidth: 85 }}>
                       {stage.end_date ? formatDateBR(stage.end_date) : "-"}
                     </td>
-                    {/* Duração planejada */}
-                    <td className="border-r px-1 text-center text-foreground/70">
+                    {/* Duração planejada - sticky */}
+                    <td className={cn("sticky z-10 border-r px-1 text-center text-foreground/70", cellStickyBg, fontSize)} style={{ left: 690, minWidth: 70 }}>
                       {plannedDuration !== null ? `${plannedDuration} dias` : "-"}
                     </td>
-                    {/* Início da Etapa (editable date) */}
-                    <td className="border-r px-1 text-center">
-                      <DatePickerCell
-                        value={stage.actual_start_date}
-                        onChange={(d) => saveActualDate(stage.id, "actual_start_date", d)}
-                      />
+                    {/* Início da Etapa - sticky */}
+                    <td className={cn("sticky z-10 border-r px-1 text-center", cellStickyBg, fontSize)} style={{ left: 760, minWidth: 110 }}>
+                      {hasChildren ? (
+                        <span className="text-foreground/70">{actualDates.start ? formatDateBR(actualDates.start) : "-"}</span>
+                      ) : (
+                        <DatePickerCell
+                          value={stage.actual_start_date}
+                          onChange={(d) => saveActualDate(stage.id, "actual_start_date", d)}
+                        />
+                      )}
                     </td>
-                    {/* Término da Etapa (editable date) */}
-                    <td className="border-r px-1 text-center">
-                      <DatePickerCell
-                        value={stage.actual_end_date}
-                        onChange={(d) => saveActualDate(stage.id, "actual_end_date", d)}
-                      />
+                    {/* Término da Etapa - sticky */}
+                    <td className={cn("sticky z-10 border-r px-1 text-center", cellStickyBg, fontSize)} style={{ left: 870, minWidth: 110 }}>
+                      {hasChildren ? (
+                        <span className="text-foreground/70">{actualDates.end ? formatDateBR(actualDates.end) : "-"}</span>
+                      ) : (
+                        <DatePickerCell
+                          value={stage.actual_end_date}
+                          onChange={(d) => saveActualDate(stage.id, "actual_end_date", d)}
+                        />
+                      )}
                     </td>
-                    {/* Duração real */}
-                    <td className="border-r px-1 text-center text-foreground/70">
+                    {/* Duração real - sticky */}
+                    <td className={cn("sticky z-10 border-r px-1 text-center text-foreground/70", cellStickyBg, fontSize)} style={{ left: 980, minWidth: 70 }}>
                       {actualDuration !== null ? `${actualDuration} dias` : "-"}
                     </td>
-                    {/* Month cells */}
+                    {/* Month cells - NOT sticky, scroll normally */}
                     {groupedColumns.map(col => {
                       const val = hasChildren
                         ? getAggregatedGroupValue(stage.id, col.monthKeys)
@@ -435,10 +426,10 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
 
                       if (isEditing) {
                         return (
-                          <td key={col.key} className="border-r px-0.5">
+                          <td key={col.key} className="border-r px-0.5" style={{ minWidth: COL_WIDTH_MONTH }}>
                             <Input
                               autoFocus
-                              className="h-7 text-xs text-right w-full"
+                              className="h-8 text-xs text-right w-full"
                               value={editValue}
                               onChange={e => setEditValue(e.target.value)}
                               onBlur={commitEdit}
@@ -452,15 +443,15 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                         <td
                           key={col.key}
                           className={cn(
-                            "border-r px-1 text-right cursor-pointer hover:bg-accent/20 transition-colors",
-                            !hasChildren && "cursor-text"
+                            "border-r px-1 text-right transition-colors",
+                            !hasChildren && "cursor-text hover:bg-accent/20"
                           )}
-                          onDoubleClick={() => handleCellDoubleClick(stage.id, col.key, col.monthKeys)}
+                          onClick={() => handleCellClick(stage.id, col.key, col.monthKeys)}
                           style={{ minWidth: COL_WIDTH_MONTH }}
                         >
                           {val > 0 ? (
                             <div className="flex flex-col items-end">
-                              <span className="text-foreground/90 text-xs font-medium">R$ {fmt(val)}</span>
+                              <span className={cn("text-foreground/90 font-medium", fontSize)}>R$ {fmt(val)}</span>
                               <span className="text-muted-foreground text-[10px]">{fmtPercent(pct)}</span>
                             </div>
                           ) : (
@@ -474,24 +465,24 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
               })}
 
               {/* Footer: Total Mensal */}
-              <tr className="bg-muted/20 font-semibold border-t-2">
-                <td className="sticky left-0 z-10 bg-muted/30 border-r px-2 text-foreground">Total Mensal</td>
-                <td className="border-r" />
-                <td className="border-r px-1 text-right text-foreground whitespace-nowrap">R$ {fmt(grandTotal)}</td>
-                <td className="border-r px-1 text-right text-foreground whitespace-nowrap">
+              <tr className="bg-muted/30 font-semibold border-t-2">
+                <td className="sticky left-0 z-10 bg-muted border-r px-2 text-foreground">Total Mensal</td>
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 200 }} />
+                <td className="sticky z-10 bg-muted border-r px-1 text-right text-foreground whitespace-nowrap" style={{ left: 260 }}>R$ {fmt(grandTotal)}</td>
+                <td className="sticky z-10 bg-muted border-r px-1 text-right text-foreground whitespace-nowrap" style={{ left: 350 }}>
                   {(() => { const total = stages.filter(s => !stages.some(c => c.parent_id === s.id)).reduce((sum, s) => sum + getRealizado(s.id), 0); return total > 0 ? `R$ ${fmt(total)}` : "-"; })()}
                 </td>
-                <td className="border-r" />
-                <td className="border-r" />
-                <td className="border-r" />
-                <td className="border-r" />
-                <td className="border-r" />
-                <td className="border-r" />
-                <td className="border-r" />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 440 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 520 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 605 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 690 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 760 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 870 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 980 }} />
                 {groupedColumns.map(col => {
                   const total = getFooterGroupTotal(col.monthKeys);
                   return (
-                    <td key={col.key} className="border-r px-1 text-right text-foreground">
+                    <td key={col.key} className="border-r px-1 text-right text-foreground" style={{ minWidth: COL_WIDTH_MONTH }}>
                       {total > 0 ? (
                         <div className="flex flex-col items-end">
                           <span className="text-xs font-medium">R$ {fmt(total)}</span>
@@ -504,17 +495,24 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
               </tr>
 
               {/* Footer: Acumulado */}
-              <tr className="bg-muted/20 font-semibold">
-                <td className="sticky left-0 z-10 bg-muted/30 border-r px-2 text-foreground">Acumulado</td>
-                <td className="border-r" /><td className="border-r" /><td className="border-r" /><td className="border-r" />
-                <td className="border-r" /><td className="border-r" /><td className="border-r" />
-                <td className="border-r" /><td className="border-r" /><td className="border-r" />
+              <tr className="bg-muted/30 font-semibold">
+                <td className="sticky left-0 z-10 bg-muted border-r px-2 text-foreground">Acumulado</td>
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 200 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 260 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 350 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 440 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 520 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 605 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 690 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 760 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 870 }} />
+                <td className="sticky z-10 bg-muted border-r" style={{ left: 980 }} />
                 {(() => {
                   let running = 0;
                   return groupedColumns.map(col => {
                     running += getFooterGroupTotal(col.monthKeys);
                     return (
-                      <td key={col.key} className="border-r px-1 text-right text-foreground">
+                      <td key={col.key} className="border-r px-1 text-right text-foreground" style={{ minWidth: COL_WIDTH_MONTH }}>
                         <div className="flex flex-col items-end">
                           <span className="text-xs font-medium">R$ {fmt(running)}</span>
                           <span className="text-[10px] text-primary">{grandTotal > 0 ? fmtPercent((running / grandTotal) * 100) : "-"}</span>
