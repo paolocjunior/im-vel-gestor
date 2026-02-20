@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import { ChevronDown, ChevronRight, CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBRNumber } from "@/components/ui/masked-number-input";
+import { formatBRNumber, parseBRNumber } from "@/components/ui/masked-number-input";
 import { ptBR } from "date-fns/locale";
 import {
   StageRow, generateMonthColumns, groupColumns,
@@ -16,6 +16,16 @@ import {
 
 interface Props {
   studyId: string;
+}
+
+/**
+ * Formats digits-only input as Brazilian currency while typing.
+ * E.g. "1" -> "0,01", "12" -> "0,12", "123" -> "1,23", "1234" -> "12,34"
+ */
+function formatDigitsAsBR(digits: string): string {
+  if (!digits) return "";
+  const num = parseInt(digits, 10) / 100;
+  return num.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export default function PhysicalFinancialSchedule({ studyId }: Props) {
@@ -135,7 +145,6 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
     return children.reduce((sum, c) => sum + getRealizado(c.id), 0);
   }, [stages, monthlyValues]);
 
-  // Compute actual dates for macro stages from children
   const getComputedActualDates = useCallback((stageId: string): { start: string | null; end: string | null } => {
     const children = stages.filter(s => s.parent_id === stageId);
     if (children.length === 0) {
@@ -212,12 +221,22 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
     if (hasChildren) return;
     const currentVal = getStageGroupValue(stageId, monthKeys);
     setEditingCell({ stageId, colKey });
-    setEditValue(currentVal > 0 ? String(currentVal) : "");
+    // Start editing with digits only so the mask works from scratch
+    setEditValue(currentVal > 0 ? formatBRNumber(currentVal) : "");
+  };
+
+  const handleEditChange = (raw: string) => {
+    const digits = raw.replace(/\D/g, "");
+    if (!digits) {
+      setEditValue("");
+      return;
+    }
+    setEditValue(formatDigitsAsBR(digits));
   };
 
   const commitEdit = () => {
     if (!editingCell) return;
-    const numVal = parseFloat(editValue.replace(/\./g, "").replace(",", ".")) || 0;
+    const numVal = parseBRNumber(editValue);
     const group = groupedColumns.find(g => g.key === editingCell.colKey);
     if (group && group.monthKeys.length > 0) {
       saveMonthlyValue(editingCell.stageId, group.monthKeys[0], numVal);
@@ -231,7 +250,6 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
 
   const COL_WIDTH_MONTH = 120;
 
-  // Font size by level
   const getFontSize = (level: number) => {
     if (level === 0) return "text-sm";
     if (level === 1) return "text-xs";
@@ -242,12 +260,6 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
     return stages
       .filter(s => !stages.some(c => c.parent_id === s.id))
       .reduce((sum, s) => sum + getStageGroupValue(s.id, monthKeys), 0);
-  };
-
-  // Solid bg for sticky cells - MUST be fully opaque to prevent text overlap on scroll
-  const stickyBg = (i: number, hasChildren: boolean) => {
-    if (hasChildren) return "bg-muted";
-    return "bg-background";
   };
 
   return (
@@ -304,11 +316,12 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
           <table className="border-collapse text-xs w-max">
             <thead className="sticky top-0 z-20">
               <tr>
+                {/* Only Etapas is sticky */}
                 <th className="sticky left-0 z-30 bg-muted border-b border-r px-2 text-left font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap" style={{ minWidth: 200 }}>Etapas</th>
-                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 200, minWidth: 60 }}>Peso</th>
-                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 260, minWidth: 90 }}>Previsto</th>
-                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 350, minWidth: 90 }}>Realizado</th>
-                <th className="sticky z-30 bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ left: 440, minWidth: 80 }}>Real x Prev</th>
+                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 60 }}>Peso</th>
+                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 90 }}>Previsto</th>
+                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 90 }}>Realizado</th>
+                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 80 }}>Real x Prev</th>
                 <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 85 }}>Data Inicial</th>
                 <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 85 }}>Data Final</th>
                 <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 70 }}>Duração</th>
@@ -323,7 +336,7 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
               </tr>
             </thead>
             <tbody>
-              {visibleStages.map((stage, i) => {
+              {visibleStages.map((stage) => {
                 const hasChildren = stages.some(s => s.parent_id === stage.id);
                 const isExpanded = expanded.has(stage.id);
                 const stageTotal = getStageTotalValue(stage, stages);
@@ -336,7 +349,6 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                   ? diffDays(stage.start_date, stage.end_date) + 1
                   : null;
 
-                // For macro stages, compute actual dates from children; for leaves, use own
                 const actualDates = hasChildren
                   ? getComputedActualDates(stage.id)
                   : { start: stage.actual_start_date, end: stage.actual_end_date };
@@ -351,7 +363,7 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
 
                 return (
                   <tr key={stage.id} className={cn("border-b hover:bg-muted/20 transition-colors", rowBg)}>
-                    {/* Etapa name - sticky */}
+                    {/* Etapa name - ONLY sticky column */}
                     <td className={cn("sticky left-0 z-10 border-r px-1 whitespace-nowrap", cellStickyBg, fontSize, hasChildren && "font-semibold")} style={{ paddingLeft: `${stage.level * 16 + 8}px`, minWidth: 200 }}>
                       <div className="flex items-center gap-1">
                         {hasChildren ? (
@@ -362,20 +374,20 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                         <span className="text-foreground/80 truncate max-w-[160px]">{stage.code} - {stage.name}</span>
                       </div>
                     </td>
-                    {/* Peso - sticky */}
-                    <td className={cn("sticky z-10 border-r px-1 text-center text-foreground/70", cellStickyBg, fontSize)} style={{ left: 200, minWidth: 60 }}>
+                    {/* Peso - scrolls */}
+                    <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 60 }}>
                       {peso !== null ? fmtPercent(peso) : "-"}
                     </td>
-                    {/* Previsto - sticky */}
-                    <td className={cn("sticky z-10 border-r px-1 text-right text-foreground/80 whitespace-nowrap", cellStickyBg, fontSize)} style={{ left: 260, minWidth: 90 }}>
+                    {/* Previsto - scrolls */}
+                    <td className={cn("border-r px-1 text-right text-foreground/80 whitespace-nowrap", fontSize)} style={{ minWidth: 90 }}>
                       {stageTotal > 0 ? `R$ ${fmt(stageTotal)}` : "-"}
                     </td>
-                    {/* Realizado - sticky */}
-                    <td className={cn("sticky z-10 border-r px-1 text-right text-foreground/80 whitespace-nowrap", cellStickyBg, fontSize)} style={{ left: 350, minWidth: 90 }}>
+                    {/* Realizado - scrolls */}
+                    <td className={cn("border-r px-1 text-right text-foreground/80 whitespace-nowrap", fontSize)} style={{ minWidth: 90 }}>
                       {realizado > 0 ? `R$ ${fmt(realizado)}` : "-"}
                     </td>
-                    {/* Real x Previsto - sticky */}
-                    <td className={cn("sticky z-10 border-r px-1 text-center", cellStickyBg, fontSize, realVsPrev > 100 ? "text-destructive" : "text-foreground/70")} style={{ left: 440, minWidth: 80 }}>
+                    {/* Real x Previsto - scrolls */}
+                    <td className={cn("border-r px-1 text-center", fontSize, realVsPrev > 100 ? "text-destructive" : "text-foreground/70")} style={{ minWidth: 80 }}>
                       {stageTotal > 0 ? fmtPercent(realVsPrev) : "-"}
                     </td>
                     {/* Data Inicial */}
@@ -416,7 +428,7 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                     <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 70 }}>
                       {actualDuration !== null ? `${actualDuration} dias` : "-"}
                     </td>
-                    {/* Month cells - NOT sticky, scroll normally */}
+                    {/* Month cells */}
                     {groupedColumns.map(col => {
                       const val = hasChildren
                         ? getAggregatedGroupValue(stage.id, col.monthKeys)
@@ -430,8 +442,9 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                             <Input
                               autoFocus
                               className="h-8 text-xs text-right w-full"
+                              inputMode="numeric"
                               value={editValue}
-                              onChange={e => setEditValue(e.target.value)}
+                              onChange={e => handleEditChange(e.target.value)}
                               onBlur={commitEdit}
                               onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") { setEditingCell(null); setEditValue(""); } }}
                             />
@@ -464,15 +477,15 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                 );
               })}
 
-              {/* Footer: Total Mensal */}
-              <tr className="bg-muted/30 font-semibold border-t-2">
-                <td className="sticky left-0 z-10 bg-muted border-r px-2 text-foreground">Total Mensal</td>
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 200 }} />
-                <td className="sticky z-10 bg-muted border-r px-1 text-right text-foreground whitespace-nowrap" style={{ left: 260 }}>R$ {fmt(grandTotal)}</td>
-                <td className="sticky z-10 bg-muted border-r px-1 text-right text-foreground whitespace-nowrap" style={{ left: 350 }}>
+              {/* Footer: Total Mensal - larger font + bold */}
+              <tr className="bg-muted/30 border-t-2">
+                <td className="sticky left-0 z-10 bg-muted border-r px-2 text-sm font-bold text-foreground whitespace-nowrap">Total Mensal</td>
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r px-1 text-right text-sm font-bold text-foreground whitespace-nowrap">R$ {fmt(grandTotal)}</td>
+                <td className="bg-muted border-r px-1 text-right text-sm font-bold text-foreground whitespace-nowrap">
                   {(() => { const total = stages.filter(s => !stages.some(c => c.parent_id === s.id)).reduce((sum, s) => sum + getRealizado(s.id), 0); return total > 0 ? `R$ ${fmt(total)}` : "-"; })()}
                 </td>
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 440 }} />
+                <td className="bg-muted border-r" />
                 <td className="bg-muted border-r" />
                 <td className="bg-muted border-r" />
                 <td className="bg-muted border-r" />
@@ -482,11 +495,11 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                 {groupedColumns.map(col => {
                   const total = getFooterGroupTotal(col.monthKeys);
                   return (
-                    <td key={col.key} className="border-r px-1 text-right text-foreground" style={{ minWidth: COL_WIDTH_MONTH }}>
+                    <td key={col.key} className="border-r px-1 text-right bg-muted" style={{ minWidth: COL_WIDTH_MONTH }}>
                       {total > 0 ? (
                         <div className="flex flex-col items-end">
-                          <span className="text-xs font-medium">R$ {fmt(total)}</span>
-                          <span className="text-[10px] text-muted-foreground">{grandTotal > 0 ? fmtPercent((total / grandTotal) * 100) : "-"}</span>
+                          <span className="text-sm font-bold text-foreground">R$ {fmt(total)}</span>
+                          <span className="text-[10px] text-muted-foreground font-medium">{grandTotal > 0 ? fmtPercent((total / grandTotal) * 100) : "-"}</span>
                         </div>
                       ) : "-"}
                     </td>
@@ -494,13 +507,13 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                 })}
               </tr>
 
-              {/* Footer: Acumulado */}
-              <tr className="bg-muted/30 font-semibold">
-                <td className="sticky left-0 z-10 bg-muted border-r px-2 text-foreground">Acumulado</td>
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 200 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 260 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 350 }} />
-                <td className="sticky z-10 bg-muted border-r" style={{ left: 440 }} />
+              {/* Footer: Acumulado - larger font + bold */}
+              <tr className="bg-muted/30">
+                <td className="sticky left-0 z-10 bg-muted border-r px-2 text-sm font-bold text-foreground whitespace-nowrap">Acumulado</td>
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r" />
+                <td className="bg-muted border-r" />
                 <td className="bg-muted border-r" />
                 <td className="bg-muted border-r" />
                 <td className="bg-muted border-r" />
@@ -512,10 +525,10 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                   return groupedColumns.map(col => {
                     running += getFooterGroupTotal(col.monthKeys);
                     return (
-                      <td key={col.key} className="border-r px-1 text-right text-foreground" style={{ minWidth: COL_WIDTH_MONTH }}>
+                      <td key={col.key} className="border-r px-1 text-right bg-muted" style={{ minWidth: COL_WIDTH_MONTH }}>
                         <div className="flex flex-col items-end">
-                          <span className="text-xs font-medium">R$ {fmt(running)}</span>
-                          <span className="text-[10px] text-primary">{grandTotal > 0 ? fmtPercent((running / grandTotal) * 100) : "-"}</span>
+                          <span className="text-sm font-bold text-foreground">R$ {fmt(running)}</span>
+                          <span className="text-[10px] text-primary font-medium">{grandTotal > 0 ? fmtPercent((running / grandTotal) * 100) : "-"}</span>
                         </div>
                       </td>
                     );
