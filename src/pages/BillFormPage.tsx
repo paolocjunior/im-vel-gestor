@@ -193,11 +193,24 @@ export default function BillFormPage() {
 
   const STORAGE_KEY = `bill_form_draft_${studyId}`;
 
+  // Pre-fill from URL params (e.g. coming from Medição/Execução for Taxas)
+  useEffect(() => {
+    if (isNew && !isClone) {
+      const prefillDesc = searchParams.get("stageName");
+      const prefillAmount = searchParams.get("amount");
+      if (prefillDesc) setDescription(decodeURIComponent(prefillDesc));
+      if (prefillAmount) setTotalAmount(Number(prefillAmount) || 0);
+    }
+  }, []);
+
   // Set initial snapshot for new bills
   useEffect(() => {
     if (isNew && !isClone && initialFormData === null) {
+      const prefillDesc = searchParams.get("stageName");
+      const prefillAmount = searchParams.get("amount");
       setInitialFormData({
-        vendorId: "", description: "", totalAmount: 0, costCenter: "", category: "",
+        vendorId: "", description: prefillDesc ? decodeURIComponent(prefillDesc) : "", 
+        totalAmount: prefillAmount ? (Number(prefillAmount) || 0) : 0, costCenter: "", category: "",
         accountId: "", paymentMethod: "", installmentPlan: "AVISTA",
         firstDueDate: todayISO(), intervalDays: 30, notes: "", installments: [],
       });
