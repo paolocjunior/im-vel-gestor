@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronDown, ChevronRight, CalendarIcon, ClipboardPlus } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ChevronDown, ChevronRight, CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRNumber } from "@/components/ui/masked-number-input";
+import { toast } from "sonner";
 
 interface StageRow {
   id: string;
@@ -23,6 +26,7 @@ interface StageRow {
   end_date: string | null;
   stage_type: string | null;
   dependency_id: string | null;
+  status: string;
 }
 
 interface UnitItem {
@@ -54,7 +58,6 @@ function getStageTypeLabel(type: string | null): string {
   }
 }
 
-/** Generate a procedural HSL color for a stage based on its root index */
 function getStageColor(rootIndex: number, subIndex: number): string {
   const goldenAngle = 137.508;
   const hue = (rootIndex * goldenAngle) % 360;
@@ -71,7 +74,38 @@ function getStageColorDark(rootIndex: number, subIndex: number): string {
   return `hsl(${Math.round(hue)}, ${saturation}%, ${lightness}%)`;
 }
 
+const getStatusBg = (status: string) => {
+  switch (status) {
+    case "stopped": return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
+    case "in_progress": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
+    case "finished": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+    case "orcamento": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+    case "pedido": return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
+    case "recebido": return "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300";
+    case "utilizado": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+    case "em_aberto": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
+    case "pago": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+    default: return "bg-muted text-muted-foreground";
+  }
+};
+
+const getStatusLabel = (status: string) => {
+  switch (status) {
+    case "stopped": return "Parado";
+    case "in_progress": return "Em andamento";
+    case "finished": return "Finalizado";
+    case "orcamento": return "Orçamento";
+    case "pedido": return "Pedido";
+    case "recebido": return "Recebido";
+    case "utilizado": return "Utilizado";
+    case "em_aberto": return "Em Aberto";
+    case "pago": return "Pago";
+    default: return "—";
+  }
+};
+
 export default function MeasurementExecution({ studyId }: Props) {
+  const navigate = useNavigate();
   const [stages, setStages] = useState<StageRow[]>([]);
   const [units, setUnits] = useState<UnitItem[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -84,7 +118,7 @@ export default function MeasurementExecution({ studyId }: Props) {
   const fetchStages = useCallback(async () => {
     const { data } = await supabase
       .from("construction_stages" as any)
-      .select("id, parent_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, stage_type, dependency_id")
+      .select("id, parent_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, stage_type, dependency_id, status")
       .eq("study_id", studyId)
       .eq("is_deleted", false)
       .order("position");
@@ -210,6 +244,105 @@ export default function MeasurementExecution({ studyId }: Props) {
     return siblings.indexOf(stage);
   };
 
+  // Handle measurement action selection
+  const handleMeasurementAction = async (stage: StageRow, action: string) => {
+    switch (action) {
+      // Material actions
+      case "orcamento":
+        toast.info("Tela de Orçamento será implementada em breve");
+        break;
+      case "pedido":
+        toast.info("Tela de Pedido será implementada em breve");
+        break;
+      case "compras":
+        toast.info("Tela de Compras será implementada em breve");
+        break;
+
+      // Taxas actions
+      case "cadastrar": {
+        // Check if bill already exists for this stage
+        const { data: existingBills } = await supabase
+          .from("bills")
+          .select("id")
+          .eq("study_id", studyId)
+          .eq("description", `Taxas - ${stage.code} - ${stage.name}`)
+          .eq("is_deleted", false);
+
+        if (existingBills && existingBills.length > 0) {
+          toast.warning("Esta taxa já foi cadastrada no financeiro.");
+          return;
+        }
+        // Navigate to new bill page with pre-filled data
+        navigate(`/studies/${studyId}/bills/new?from=measurement&stageId=${stage.id}&stageName=${encodeURIComponent(`Taxas - ${stage.code} - ${stage.name}`)}&amount=${stage.total_value}`);
+        break;
+      }
+      case "pagar":
+        toast.info("Funcionalidade de pagamento será implementada em breve");
+        break;
+
+      // Serviço / Mão de Obra actions
+      case "incluir_medicao":
+        toast.info("Incluir Medição será implementada em breve");
+        break;
+      case "retificar_medicao":
+        toast.info("Retificar Medição será implementada em breve");
+        break;
+      case "estornar_medicao":
+        toast.info("Estornar Medição será implementada em breve");
+        break;
+    }
+  };
+
+  function renderMeasurementColumn(stage: StageRow) {
+    const hasChildren = stages.some(s => s.parent_id === stage.id);
+    if (hasChildren || !stage.stage_type) {
+      return <div className="w-[150px] h-8" />;
+    }
+
+    if (stage.stage_type === 'material') {
+      return (
+        <Select onValueChange={(v) => handleMeasurementAction(stage, v)}>
+          <SelectTrigger className="w-[150px] h-8 text-xs">
+            <SelectValue placeholder="Ação..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="orcamento" className="text-xs">Orçamento</SelectItem>
+            <SelectItem value="pedido" className="text-xs">Pedido</SelectItem>
+            <SelectItem value="compras" className="text-xs">Compras</SelectItem>
+          </SelectContent>
+        </Select>
+      );
+    }
+
+    if (stage.stage_type === 'taxas') {
+      return (
+        <Select onValueChange={(v) => handleMeasurementAction(stage, v)}>
+          <SelectTrigger className="w-[150px] h-8 text-xs">
+            <SelectValue placeholder="Ação..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="cadastrar" className="text-xs">Cadastrar</SelectItem>
+            <SelectItem value="pagar" className="text-xs">Pagar</SelectItem>
+          </SelectContent>
+        </Select>
+      );
+    }
+
+    // servico or mao_de_obra
+    return (
+      <Select onValueChange={(v) => handleMeasurementAction(stage, v)}>
+        <SelectTrigger className="w-[150px] h-8 text-xs">
+          <SelectValue placeholder="Ação..." />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="incluir_medicao" className="text-xs">Incluir Medição</SelectItem>
+          <SelectItem value="retificar_medicao" className="text-xs">Retificar Medição</SelectItem>
+          <SelectItem value="estornar_medicao" className="text-xs">Estornar Medição</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+
   function renderStageRow(stage: StageRow, depth: number) {
     const children = stages.filter(s => s.parent_id === stage.id);
     const hasChildren = children.length > 0;
@@ -283,11 +416,8 @@ export default function MeasurementExecution({ studyId }: Props) {
               </span>
             </div>
 
-            {/* Incluir Medição link */}
-            <button className="w-[120px] h-8 flex items-center justify-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors">
-              <ClipboardPlus className="h-3.5 w-3.5" />
-              <span>Incluir Medição</span>
-            </button>
+            {/* Medição - type-specific dropdown */}
+            {renderMeasurementColumn(stage)}
           </>
         );
       }
@@ -319,7 +449,7 @@ export default function MeasurementExecution({ studyId }: Props) {
           ) : (
             <div className="w-[160px] h-8" />
           )}
-          <div className="w-[120px] h-8" />
+          <div className="w-[150px] h-8" />
         </>
       );
     };
@@ -418,7 +548,7 @@ export default function MeasurementExecution({ studyId }: Props) {
             <div className="w-24 text-right">V. Total</div>
             <div className="w-20 text-center">Dep.</div>
             <div className="w-[160px] text-center">Período</div>
-            <div className="w-[120px] text-center">Medição</div>
+            <div className="w-[150px] text-center">Medição</div>
           </div>
         </div>
 
