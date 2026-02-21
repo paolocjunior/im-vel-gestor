@@ -617,7 +617,7 @@ export default function BillFormPage() {
 
   // === Save ===
   const saveBill = async () => {
-    if (!vendorId) { toast.error("Fornecedor é obrigatório."); return; }
+    // Fornecedor is optional (e.g. government taxes without a visible CNPJ)
     if (!description.trim()) { toast.error("Descrição é obrigatória."); return; }
     if (totalAmount <= 0) { toast.error("Valor total deve ser maior que zero."); return; }
     if (!costCenter) { toast.error("Centro de Custo é obrigatório."); return; }
@@ -848,7 +848,7 @@ export default function BillFormPage() {
               }} disabled={isView}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="compras">Compras</SelectItem>
+                  <SelectItem value="compras">Não Recorrente</SelectItem>
                   <SelectItem value="recorrente">Recorrente</SelectItem>
                 </SelectContent>
               </Select>
