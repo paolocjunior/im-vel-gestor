@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { MaskedNumberInput } from "@/components/ui/masked-number-input";
 import { useTheme } from "next-themes";
 import { Switch } from "@/components/ui/switch";
 import { COST_CENTERS } from "@/lib/billConstants";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface UserSettings {
   roi_viable_threshold: number;
@@ -40,13 +41,22 @@ interface Category {
   name: string;
 }
 
-interface CatalogStage {
+interface CatalogNode {
   id: string;
+  parent_id: string | null;
   name: string;
   code: string;
+  level: number;
   is_system: boolean;
-  subStages: { id: string; name: string; code: string; is_system: boolean }[];
-  expanded?: boolean;
+  children: CatalogNode[];
+}
+
+interface ConstructionUnit {
+  id: string;
+  name: string;
+  abbreviation: string;
+  has_decimals: boolean;
+  is_system: boolean;
 }
 
 export default function SettingsPage() {
@@ -66,13 +76,20 @@ export default function SettingsPage() {
   const [newCCName, setNewCCName] = useState("");
   const [newCatNames, setNewCatNames] = useState<Record<string, string>>({});
 
-  const [catalogStages, setCatalogStages] = useState<CatalogStage[]>([]);
+  const [catalogTree, setCatalogTree] = useState<CatalogNode[]>([]);
+  const [expandedCatalog, setExpandedCatalog] = useState<Set<string>>(new Set());
   const [newStageName, setNewStageName] = useState("");
   const [newSubStageNames, setNewSubStageNames] = useState<Record<string, string>>({});
 
   // Inline editing state
   const [editingStageId, setEditingStageId] = useState<string | null>(null);
   const [editingStageName, setEditingStageName] = useState("");
+
+  // Construction units
+  const [units, setUnits] = useState<ConstructionUnit[]>([]);
+  const [newUnit, setNewUnit] = useState({ name: "", abbreviation: "", has_decimals: false });
+  const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
+  const [editingUnit, setEditingUnit] = useState({ name: "", abbreviation: "", has_decimals: false });
 
   useEffect(() => {
     if (!user) return;
@@ -91,52 +108,34 @@ export default function SettingsPage() {
       });
     }
     if (instRes.data) setInstitutions(instRes.data);
-    await Promise.all([loadCostCenters(), loadCatalogStages()]);
+    await Promise.all([loadCostCenters(), loadCatalogStages(), loadUnits()]);
   };
 
+  // ── Cost Centers ──
   const loadCostCenters = async () => {
     const { data: ccData } = await supabase.from("user_cost_centers" as any)
-      .select("id, name")
-      .eq("user_id", user!.id)
-      .eq("is_active", true)
-      .order("name");
+      .select("id, name").eq("user_id", user!.id).eq("is_active", true).order("name");
     const { data: catData } = await supabase.from("user_categories" as any)
-      .select("id, cost_center_id, name")
-      .eq("user_id", user!.id)
-      .eq("is_active", true)
-      .order("name");
+      .select("id, cost_center_id, name").eq("user_id", user!.id).eq("is_active", true).order("name");
 
     const ccs: CostCenter[] = ((ccData as any[]) || []).map((cc: any) => ({
-      id: cc.id,
-      name: cc.name,
+      id: cc.id, name: cc.name,
       categories: ((catData as any[]) || []).filter((cat: any) => cat.cost_center_id === cc.id).map((cat: any) => ({
-        id: cat.id,
-        cost_center_id: cat.cost_center_id,
-        name: cat.name,
+        id: cat.id, cost_center_id: cat.cost_center_id, name: cat.name,
       })),
       expanded: false,
     }));
 
-    if (ccs.length === 0) {
-      await seedDefaults();
-      return;
-    }
-
+    if (ccs.length === 0) { await seedDefaults(); return; }
     setCostCenters(ccs);
   };
 
   const seedDefaults = async () => {
     for (const [ccName, categories] of Object.entries(COST_CENTERS)) {
       const { data: ccRow } = await supabase.from("user_cost_centers" as any)
-        .insert({ user_id: user!.id, name: ccName } as any)
-        .select("id")
-        .single();
+        .insert({ user_id: user!.id, name: ccName } as any).select("id").single();
       if (ccRow) {
-        const catInserts = categories.map(catName => ({
-          user_id: user!.id,
-          cost_center_id: (ccRow as any).id,
-          name: catName,
-        }));
+        const catInserts = categories.map(catName => ({ user_id: user!.id, cost_center_id: (ccRow as any).id, name: catName }));
         await supabase.from("user_categories" as any).insert(catInserts as any);
       }
     }
@@ -206,7 +205,7 @@ export default function SettingsPage() {
     setCostCenters(prev => prev.map(cc => cc.id === ccId ? { ...cc, expanded: !cc.expanded } : cc));
   };
 
-  // Stage catalog management
+  // ── Stage catalog (recursive) ──
   const loadCatalogStages = async () => {
     const { data: allCatalog } = await supabase
       .from("construction_stage_catalog" as any)
@@ -216,37 +215,42 @@ export default function SettingsPage() {
 
     if (!allCatalog) return;
 
-    const items = allCatalog as any[];
-    const visible = items.filter(c => c.user_id === null || c.user_id === user!.id);
-    const macros = visible.filter(c => c.level === 0);
-    const subs = visible.filter(c => c.level === 1);
+    const items = (allCatalog as any[]).filter(c => c.user_id === null || c.user_id === user!.id);
 
-    const stages: CatalogStage[] = macros.map(m => ({
-      id: m.id,
-      name: m.name,
-      code: m.code,
-      is_system: m.is_system,
-      subStages: subs.filter(s => s.parent_id === m.id).map((s: any) => ({
-        id: s.id, name: s.name, code: s.code, is_system: s.is_system,
-      })),
-      expanded: false,
-    }));
+    const buildTree = (parentId: string | null): CatalogNode[] => {
+      return items
+        .filter(c => c.parent_id === parentId)
+        .map(c => ({
+          id: c.id,
+          parent_id: c.parent_id,
+          name: c.name,
+          code: c.code,
+          level: c.level,
+          is_system: c.is_system,
+          children: buildTree(c.id),
+        }));
+    };
 
-    setCatalogStages(stages);
+    setCatalogTree(buildTree(null));
+  };
+
+  const toggleCatalogExpand = (id: string) => {
+    setExpandedCatalog(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
 
   const addCatalogStage = async () => {
     if (!newStageName.trim()) { toast.error("Nome é obrigatório."); return; }
-    if (catalogStages.some(s => s.name.toLowerCase() === newStageName.trim().toLowerCase())) {
-      toast.error("Já existe uma etapa com este nome."); return;
-    }
-    const maxCode = catalogStages.reduce((max, s) => Math.max(max, parseInt(s.code, 10) || 0), 0);
+    const maxCode = catalogTree.reduce((max, s) => Math.max(max, parseInt(s.code, 10) || 0), 0);
     await supabase.from("construction_stage_catalog" as any).insert({
       user_id: user!.id,
       code: `${maxCode + 1}`,
       name: newStageName.trim(),
       level: 0,
-      position: catalogStages.length + 1,
+      position: catalogTree.length + 1,
       is_system: false,
     } as any);
     setNewStageName("");
@@ -254,42 +258,31 @@ export default function SettingsPage() {
     loadCatalogStages();
   };
 
-  const removeCatalogStage = async (id: string) => {
-    await supabase.from("construction_stage_catalog" as any).update({ is_active: false } as any).eq("id", id);
-    await supabase.from("construction_stage_catalog" as any).update({ is_active: false } as any).eq("parent_id", id);
-    toast.success("Etapa removida do catálogo.");
-    loadCatalogStages();
-  };
-
-  const addCatalogSubStage = async (parentId: string) => {
-    const name = newSubStageNames[parentId]?.trim();
+  const addCatalogChild = async (parent: CatalogNode) => {
+    const name = newSubStageNames[parent.id]?.trim();
     if (!name) { toast.error("Nome é obrigatório."); return; }
-    const parent = catalogStages.find(s => s.id === parentId);
-    if (!parent) return;
-    if (parent.subStages.some(s => s.name.toLowerCase() === name.toLowerCase())) {
-      toast.error("Já existe uma sub-etapa com este nome."); return;
-    }
-    const maxSubNum = parent.subStages.reduce((max, s) => {
+    const maxSubNum = parent.children.reduce((max, s) => {
       const parts = s.code.split('.');
       return Math.max(max, parseInt(parts[parts.length - 1], 10) || 0);
     }, 0);
     await supabase.from("construction_stage_catalog" as any).insert({
       user_id: user!.id,
-      parent_id: parentId,
+      parent_id: parent.id,
       code: `${parent.code}.${maxSubNum + 1}`,
       name,
-      level: 1,
-      position: parent.subStages.length + 1,
+      level: parent.level + 1,
+      position: parent.children.length + 1,
       is_system: false,
     } as any);
-    setNewSubStageNames(prev => ({ ...prev, [parentId]: "" }));
-    toast.success("Sub-etapa adicionada ao catálogo!");
+    setNewSubStageNames(prev => ({ ...prev, [parent.id]: "" }));
+    toast.success("Sub-etapa adicionada!");
     loadCatalogStages();
   };
 
-  const removeCatalogSubStage = async (id: string) => {
+  const removeCatalogNode = async (id: string) => {
     await supabase.from("construction_stage_catalog" as any).update({ is_active: false } as any).eq("id", id);
-    toast.success("Sub-etapa removida do catálogo.");
+    await supabase.from("construction_stage_catalog" as any).update({ is_active: false } as any).eq("parent_id", id);
+    toast.success("Etapa removida do catálogo.");
     loadCatalogStages();
   };
 
@@ -302,8 +295,112 @@ export default function SettingsPage() {
     loadCatalogStages();
   };
 
-  const toggleCatalogExpand = (id: string) => {
-    setCatalogStages(prev => prev.map(s => s.id === id ? { ...s, expanded: !s.expanded } : s));
+  // ── Construction Units ──
+  const loadUnits = async () => {
+    const { data } = await supabase
+      .from("construction_units")
+      .select("id, name, abbreviation, has_decimals, is_system")
+      .eq("is_active", true)
+      .order("name");
+    if (data) setUnits(data);
+  };
+
+  const addUnit = async () => {
+    if (!newUnit.name.trim() || !newUnit.abbreviation.trim()) {
+      toast.error("Nome e abreviação são obrigatórios.");
+      return;
+    }
+    await supabase.from("construction_units").insert({
+      user_id: user!.id,
+      name: newUnit.name.trim(),
+      abbreviation: newUnit.abbreviation.trim(),
+      has_decimals: newUnit.has_decimals,
+      is_system: false,
+    });
+    setNewUnit({ name: "", abbreviation: "", has_decimals: false });
+    toast.success("Unidade adicionada!");
+    loadUnits();
+  };
+
+  const removeUnit = async (id: string) => {
+    await supabase.from("construction_units").update({ is_active: false }).eq("id", id);
+    toast.success("Unidade removida.");
+    loadUnits();
+  };
+
+  const saveEditUnit = async (id: string) => {
+    if (!editingUnit.name.trim() || !editingUnit.abbreviation.trim()) {
+      toast.error("Nome e abreviação são obrigatórios.");
+      return;
+    }
+    await supabase.from("construction_units").update({
+      name: editingUnit.name.trim(),
+      abbreviation: editingUnit.abbreviation.trim(),
+      has_decimals: editingUnit.has_decimals,
+    }).eq("id", id);
+    setEditingUnitId(null);
+    toast.success("Unidade atualizada!");
+    loadUnits();
+  };
+
+  // ── Recursive render for catalog ──
+  const renderCatalogNode = (node: CatalogNode, depth: number = 0) => {
+    const isExpanded = expandedCatalog.has(node.id);
+    const hasChildren = node.children.length > 0;
+
+    return (
+      <div key={node.id} className={depth > 0 ? "border-l ml-3 pl-2" : "border rounded-lg"}>
+        <div className="flex items-center gap-1.5 px-2 py-1.5 cursor-pointer hover:bg-muted/50" onClick={() => toggleCatalogExpand(node.id)}>
+          {hasChildren || depth < 2 ? (
+            isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          ) : <div className="w-3.5" />}
+
+          {editingStageId === node.id ? (
+            <Input
+              value={editingStageName}
+              onChange={e => setEditingStageName(e.target.value)}
+              className="h-6 text-sm flex-1"
+              autoFocus
+              onClick={e => e.stopPropagation()}
+              onKeyDown={e => {
+                if (e.key === "Enter") renameCatalogItem(node.id, editingStageName);
+                if (e.key === "Escape") { setEditingStageId(null); setEditingStageName(""); }
+              }}
+              onBlur={() => renameCatalogItem(node.id, editingStageName)}
+            />
+          ) : (
+            <span className={`text-sm flex-1 truncate ${depth === 0 ? "font-semibold" : ""}`}>{node.code} - {node.name}</span>
+          )}
+
+          {hasChildren && <span className="text-xs text-muted-foreground mr-1">{node.children.length} sub.</span>}
+          <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={e => { e.stopPropagation(); setEditingStageId(node.id); setEditingStageName(node.name); }}>
+            <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={e => { e.stopPropagation(); removeCatalogNode(node.id); }}>
+            <Trash2 className="h-2.5 w-2.5 text-destructive" />
+          </Button>
+        </div>
+
+        {isExpanded && (
+          <div className="py-1 space-y-0.5">
+            {node.children.map(child => renderCatalogNode(child, depth + 1))}
+            <div className="flex gap-2 px-2 py-1" style={{ paddingLeft: depth > 0 ? "0.5rem" : "2rem" }}>
+              <Input
+                value={newSubStageNames[node.id] || ""}
+                onChange={e => setNewSubStageNames(prev => ({ ...prev, [node.id]: e.target.value }))}
+                placeholder="Nova sub-etapa..."
+                className="h-7 text-xs"
+                onClick={e => e.stopPropagation()}
+                onKeyDown={e => { if (e.key === "Enter") addCatalogChild(node); }}
+              />
+              <Button onClick={() => addCatalogChild(node)} size="sm" className="h-7 text-xs shrink-0">
+                <Plus className="h-2.5 w-2.5 mr-1" /> Add
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -323,7 +420,7 @@ export default function SettingsPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Column 1: Settings + Theme + Institutions */}
+          {/* Column 1: Settings + Theme + Institutions + Units */}
           <div className="space-y-6">
             <div className="card-dashboard space-y-4">
               <h2 className="font-bold text-base">Configurações</h2>
@@ -378,6 +475,95 @@ export default function SettingsPage() {
                       <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => removeInstitution(inst.id)}>
                         <Trash2 className="h-3 w-3 text-destructive" />
                       </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Units Card */}
+            <div className="card-dashboard space-y-3">
+              <h2 className="font-bold text-base">Unidades de Medida</h2>
+              <p className="text-xs text-muted-foreground">Unidades usadas nas etapas de construção</p>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    value={newUnit.name}
+                    onChange={e => setNewUnit(s => ({ ...s, name: e.target.value }))}
+                    placeholder="Nome (ex: Metro)"
+                    className="h-8 text-sm flex-1"
+                  />
+                  <Input
+                    value={newUnit.abbreviation}
+                    onChange={e => setNewUnit(s => ({ ...s, abbreviation: e.target.value }))}
+                    placeholder="Abrev. (ex: m)"
+                    className="h-8 text-sm w-24"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={newUnit.has_decimals}
+                      onCheckedChange={v => setNewUnit(s => ({ ...s, has_decimals: !!v }))}
+                    />
+                    <Label className="text-xs font-normal">Permite decimais</Label>
+                  </div>
+                  <Button onClick={addUnit} size="sm" className="h-8 shrink-0">
+                    <Plus className="h-3 w-3 mr-1" /> Adicionar
+                  </Button>
+                </div>
+              </div>
+              {units.length > 0 && (
+                <div className="space-y-1 pt-2 border-t max-h-[300px] overflow-y-auto">
+                  {units.map(u => (
+                    <div key={u.id}>
+                      {editingUnitId === u.id ? (
+                        <div className="space-y-1.5 py-1.5 px-1 bg-muted/30 rounded">
+                          <div className="flex gap-2">
+                            <Input
+                              value={editingUnit.name}
+                              onChange={e => setEditingUnit(s => ({ ...s, name: e.target.value }))}
+                              className="h-7 text-xs flex-1"
+                              autoFocus
+                            />
+                            <Input
+                              value={editingUnit.abbreviation}
+                              onChange={e => setEditingUnit(s => ({ ...s, abbreviation: e.target.value }))}
+                              className="h-7 text-xs w-20"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                checked={editingUnit.has_decimals}
+                                onCheckedChange={v => setEditingUnit(s => ({ ...s, has_decimals: !!v }))}
+                              />
+                              <Label className="text-xs font-normal">Decimais</Label>
+                            </div>
+                            <div className="flex gap-1">
+                              <Button size="sm" className="h-6 text-xs" onClick={() => saveEditUnit(u.id)}>Salvar</Button>
+                              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setEditingUnitId(null)}>Cancelar</Button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between py-1 text-sm">
+                          <div>
+                            <span className="font-medium">{u.name}</span>
+                            <span className="text-muted-foreground ml-1.5 text-xs">({u.abbreviation})</span>
+                            {u.has_decimals && <span className="text-muted-foreground ml-1.5 text-xs">• decimais</span>}
+                            {u.is_system && <span className="text-muted-foreground ml-1.5 text-xs italic">sistema</span>}
+                          </div>
+                          <div className="flex items-center gap-0.5">
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => { setEditingUnitId(u.id); setEditingUnit({ name: u.name, abbreviation: u.abbreviation, has_decimals: u.has_decimals }); }}>
+                              <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => removeUnit(u.id)}>
+                              <Trash2 className="h-3 w-3 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -451,12 +637,12 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Column 3: Stage Catalog - ALL items editable & deletable */}
+          {/* Column 3: Stage Catalog - recursive */}
           <div>
             <div className="card-dashboard space-y-4">
               <div>
                 <h2 className="font-bold text-base">Etapas e Sub-Etapas</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">Catálogo de etapas (macro) → Sub-etapas (micro)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Catálogo hierárquico de etapas da construção</p>
               </div>
 
               <div className="flex gap-2">
@@ -473,81 +659,8 @@ export default function SettingsPage() {
               </div>
 
               <div className="space-y-1 max-h-[500px] overflow-y-auto">
-                {catalogStages.map(stage => (
-                  <div key={stage.id} className="border rounded-lg">
-                    <div className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/50" onClick={() => toggleCatalogExpand(stage.id)}>
-                      {stage.expanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-                      {editingStageId === stage.id ? (
-                        <Input
-                          value={editingStageName}
-                          onChange={e => setEditingStageName(e.target.value)}
-                          className="h-6 text-sm flex-1"
-                          autoFocus
-                          onClick={e => e.stopPropagation()}
-                          onKeyDown={e => {
-                            if (e.key === "Enter") renameCatalogItem(stage.id, editingStageName);
-                            if (e.key === "Escape") { setEditingStageId(null); setEditingStageName(""); }
-                          }}
-                          onBlur={() => renameCatalogItem(stage.id, editingStageName)}
-                        />
-                      ) : (
-                        <span className="font-semibold text-sm flex-1 truncate">{stage.code} - {stage.name}</span>
-                      )}
-                      <span className="text-xs text-muted-foreground mr-1">{stage.subStages.length} sub.</span>
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={e => { e.stopPropagation(); setEditingStageId(stage.id); setEditingStageName(stage.name); }}>
-                        <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={e => { e.stopPropagation(); removeCatalogStage(stage.id); }}>
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
-                    </div>
-
-                    {stage.expanded && (
-                      <div className="border-t px-3 py-2 pl-8 space-y-1">
-                        {stage.subStages.map(sub => (
-                          <div key={sub.id} className="flex items-center justify-between py-0.5 text-sm">
-                            {editingStageId === sub.id ? (
-                              <Input
-                                value={editingStageName}
-                                onChange={e => setEditingStageName(e.target.value)}
-                                className="h-6 text-xs flex-1 mr-2"
-                                autoFocus
-                                onKeyDown={e => {
-                                  if (e.key === "Enter") renameCatalogItem(sub.id, editingStageName);
-                                  if (e.key === "Escape") { setEditingStageId(null); setEditingStageName(""); }
-                                }}
-                                onBlur={() => renameCatalogItem(sub.id, editingStageName)}
-                              />
-                            ) : (
-                              <span className="truncate flex-1">{sub.code} - {sub.name}</span>
-                            )}
-                            <div className="flex items-center gap-0.5 shrink-0">
-                              <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => { setEditingStageId(sub.id); setEditingStageName(sub.name); }}>
-                                <Pencil className="h-2 w-2 text-muted-foreground" />
-                              </Button>
-                              <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => removeCatalogSubStage(sub.id)}>
-                                <Trash2 className="h-2.5 w-2.5 text-destructive" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                        <div className="flex gap-2 pt-1">
-                          <Input
-                            value={newSubStageNames[stage.id] || ""}
-                            onChange={e => setNewSubStageNames(prev => ({ ...prev, [stage.id]: e.target.value }))}
-                            placeholder="Nova sub-etapa..."
-                            className="h-7 text-xs"
-                            onKeyDown={e => e.key === "Enter" && addCatalogSubStage(stage.id)}
-                          />
-                          <Button onClick={() => addCatalogSubStage(stage.id)} size="sm" className="h-7 text-xs shrink-0">
-                            <Plus className="h-2.5 w-2.5 mr-1" /> Add
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {catalogStages.length === 0 && (
+                {catalogTree.map(node => renderCatalogNode(node, 0))}
+                {catalogTree.length === 0 && (
                   <p className="text-sm text-muted-foreground py-4 text-center">Carregando catálogo de etapas...</p>
                 )}
               </div>
