@@ -47,6 +47,7 @@ interface Installment {
   bill_installment_plan: string;
   bill_vendor_id: string | null;
   bill_total_amount: number;
+  bill_stage_id: string | null;
 }
 
 type SortKey = "due_date" | "description" | "amount" | "cost_center" | "category" | "paid_at" | "status";
@@ -140,7 +141,7 @@ export default function BillsPage() {
   const loadData = async () => {
     // Load installments with bill info
     const { data: bills } = await supabase.from("bills")
-      .select("id, description, cost_center, category, installment_plan, vendor_id, total_amount")
+      .select("id, description, cost_center, category, installment_plan, vendor_id, total_amount, stage_id")
       .eq("study_id", studyId).eq("is_deleted", false);
     const { data: insts } = await supabase.from("bill_installments")
       .select("*").eq("study_id", studyId).eq("is_deleted", false)
@@ -167,6 +168,7 @@ export default function BillsPage() {
         bill_installment_plan: bill.installment_plan || "AVISTA",
         bill_vendor_id: bill.vendor_id || null,
         bill_total_amount: Number(bill.total_amount || 0),
+        bill_stage_id: bill.stage_id || null,
       };
     }).filter(inst => billMap[inst.bill_id]); // only show installments whose bill exists
 
@@ -285,6 +287,14 @@ export default function BillsPage() {
     if (!paymentInstId) return;
     await supabase.from("bill_installments").update({ status: "PAID", paid_at: paymentDate }).eq("id", paymentInstId);
     const inst = installments.find(i => i.id === paymentInstId)!;
+    // Sync payment to linked construction stage (taxas)
+    if (inst.bill_stage_id) {
+      await supabase.from("construction_stages" as any).update({
+        status: "pago",
+        actual_start_date: paymentDate,
+        actual_end_date: paymentDate,
+      }).eq("id", inst.bill_stage_id);
+    }
     setPaymentInstId(null);
     setPaymentConfirm({ ...inst, paid_at: paymentDate, status: "PAID" });
     loadData();
@@ -305,6 +315,15 @@ export default function BillsPage() {
 
   const handleReopen = async (instId: string) => {
     await supabase.from("bill_installments").update({ status: "PENDING", paid_at: null }).eq("id", instId);
+    // Reopen linked construction stage (taxas) back to em_aberto
+    const inst = installments.find(i => i.id === instId);
+    if (inst?.bill_stage_id) {
+      await supabase.from("construction_stages" as any).update({
+        status: "em_aberto",
+        actual_start_date: null,
+        actual_end_date: null,
+      }).eq("id", inst.bill_stage_id);
+    }
     toast.success("Vencimento reaberto.");
     loadData();
   };

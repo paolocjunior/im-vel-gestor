@@ -101,6 +101,7 @@ export type Database = {
           is_deleted: boolean
           notes: string | null
           payment_method: string | null
+          stage_id: string | null
           study_id: string
           total_amount: number
           updated_at: string
@@ -119,6 +120,7 @@ export type Database = {
           is_deleted?: boolean
           notes?: string | null
           payment_method?: string | null
+          stage_id?: string | null
           study_id: string
           total_amount?: number
           updated_at?: string
@@ -137,6 +139,7 @@ export type Database = {
           is_deleted?: boolean
           notes?: string | null
           payment_method?: string | null
+          stage_id?: string | null
           study_id?: string
           total_amount?: number
           updated_at?: string
@@ -148,6 +151,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "financial_institutions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bills_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "construction_stages"
             referencedColumns: ["id"]
           },
           {

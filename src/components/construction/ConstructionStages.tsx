@@ -516,9 +516,26 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     }
     await supabase.from("construction_stages" as any).update(update).eq("id", stageId);
 
+    // Sync taxas value/date changes to linked bill
+    const stage = stages.find(s => s.id === stageId);
+    if (stage?.stage_type === 'taxas' && (field === "total_value" || update.total_value !== undefined)) {
+      const newTotal = update.total_value ?? value;
+      const { data: linkedBills } = await supabase.from("bills")
+        .select("id")
+        .eq("stage_id", stageId)
+        .eq("is_deleted", false);
+      if (linkedBills && linkedBills.length > 0) {
+        for (const bill of linkedBills) {
+          await supabase.from("bills").update({ total_amount: newTotal }).eq("id", bill.id);
+          // Update pending installments amount too
+          await supabase.from("bill_installments").update({ amount: newTotal })
+            .eq("bill_id", bill.id).eq("status", "PENDING");
+        }
+      }
+    }
+
     // Status propagation logic
     if (field === "status") {
-      const stage = stages.find(s => s.id === stageId);
       if (stage) {
         const children = stages.filter(s => s.parent_id === stageId);
         if (children.length > 0) {
@@ -549,6 +566,21 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     await supabase.from("construction_stages" as any)
       .update({ start_date: date, end_date: date })
       .eq("id", stageId);
+    // Sync taxas date to linked bill's first_due_date and installment due_date
+    const stage = stages.find(s => s.id === stageId);
+    if (stage?.stage_type === 'taxas' && date) {
+      const { data: linkedBills } = await supabase.from("bills")
+        .select("id")
+        .eq("stage_id", stageId)
+        .eq("is_deleted", false);
+      if (linkedBills && linkedBills.length > 0) {
+        for (const bill of linkedBills) {
+          await supabase.from("bills").update({ first_due_date: date }).eq("id", bill.id);
+          await supabase.from("bill_installments").update({ due_date: date })
+            .eq("bill_id", bill.id).eq("status", "PENDING");
+        }
+      }
+    }
     fetchStages();
     onStagesChanged();
   };
