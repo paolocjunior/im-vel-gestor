@@ -198,13 +198,18 @@ export default function BillFormPage() {
 
   const STORAGE_KEY = `bill_form_draft_${studyId}`;
 
+  // Stage ID for taxas linking
+  const [stageId, setStageId] = useState<string | null>(null);
+
   // Pre-fill from URL params (e.g. coming from Medição/Execução for Taxas)
   useEffect(() => {
     if (isNew && !isClone) {
       const prefillDesc = searchParams.get("stageName");
       const prefillAmount = searchParams.get("amount");
+      const prefillStageId = searchParams.get("stageId");
       if (prefillDesc) setDescription(decodeURIComponent(prefillDesc));
       if (prefillAmount) setTotalAmount(Number(prefillAmount) || 0);
+      if (prefillStageId) setStageId(prefillStageId);
     }
   }, []);
 
@@ -308,6 +313,7 @@ export default function BillFormPage() {
     if (!bill) { navigate(billsListUrl); return; }
 
     setVendorId(bill.vendor_id || "");
+    setStageId((bill as any).stage_id || null);
     setDescription(bill.description);
     setTotalAmount(Number(bill.total_amount));
     setCostCenter(bill.cost_center || "");
@@ -620,6 +626,14 @@ export default function BillFormPage() {
     setVendorId(data.id);
   };
 
+  // Sync bill data back to construction stage (for taxas)
+  const syncBillToStage = async (sId: string, amount: number, dueDate: string) => {
+    await supabase.from("construction_stages" as any).update({
+      total_value: amount,
+      start_date: dueDate || null,
+    }).eq("id", sId);
+  };
+
   // === Save ===
   const saveBill = async () => {
     // Fornecedor is optional (e.g. government taxes without a visible CNPJ)
@@ -652,7 +666,7 @@ export default function BillFormPage() {
     const effectiveInterval = typeof intervalDays === "number" ? intervalDays : 30;
     const effectivePlan = billType === "recorrente" ? "RECORRENTE" : installmentPlan;
 
-    const billPayload = {
+    const billPayload: any = {
       study_id: studyId!,
       vendor_id: vendorId || null,
       description: description.trim(),
@@ -665,11 +679,17 @@ export default function BillFormPage() {
       first_due_date: effectivePlan === "AVISTA" ? firstDueDate : null,
       interval_days: effectiveInterval,
       notes: notes || null,
+      stage_id: stageId || null,
     };
 
     if (isEdit && billId) {
       // Update bill
       await supabase.from("bills").update(billPayload).eq("id", billId);
+
+      // Sync value and date back to linked construction stage (taxas)
+      if (stageId) {
+        await syncBillToStage(stageId, totalAmount, firstDueDate);
+      }
 
       if (showInstallments) {
         // Delete all old pending installments from DB
@@ -719,6 +739,11 @@ export default function BillFormPage() {
     const { data: newBill, error: billErr } = await supabase.from("bills").insert(billPayload).select("id").single();
     if (billErr || !newBill) { setSaving(false); toast.error("Erro ao salvar despesa."); return; }
 
+    // Sync value and date back to linked construction stage (taxas)
+    if (stageId) {
+      await syncBillToStage(stageId, totalAmount, firstDueDate);
+    }
+
     // Upload pending attachments
     if (pendingFiles.length > 0) {
       await uploadFilesToBill(newBill.id, pendingFiles);
@@ -766,6 +791,14 @@ export default function BillFormPage() {
     if (paid && lastBillId) {
       await supabase.from("bill_installments").update({ status: "PAID", paid_at: firstDueDate })
         .eq("bill_id", lastBillId).eq("status", "PENDING");
+      // If linked to a taxas stage, update status to pago
+      if (stageId) {
+        await supabase.from("construction_stages" as any).update({
+          status: "pago",
+          actual_start_date: firstDueDate,
+          actual_end_date: firstDueDate,
+        }).eq("id", stageId);
+      }
     }
     setAvistaConfirmOpen(false);
     toast.success("Despesa criada!");
