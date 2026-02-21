@@ -163,7 +163,7 @@ export default function ConstructionPage() {
     }
   }
 
-  const isFullWidthView = activeView === "physical-financial" || activeView === "gantt";
+  const isFullWidthView = activeView === "physical-financial" || activeView === "gantt" || activeView === "stages";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
