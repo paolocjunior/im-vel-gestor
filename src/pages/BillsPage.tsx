@@ -129,7 +129,7 @@ export default function BillsPage() {
   const [overdueFine, setOverdueFine] = useState(0);
   const [overduePaymentDate, setOverduePaymentDate] = useState(todayISO());
 
-  useEffect(() => { if (user && studyId) { loadData(); loadBanks(); } }, [user, studyId]);
+  useEffect(() => { if (user && studyId) { loadData(); loadBanks(); } }, [user?.id, studyId]);
 
   const loadBanks = async () => {
     const { data } = await supabase.from("financial_institutions")

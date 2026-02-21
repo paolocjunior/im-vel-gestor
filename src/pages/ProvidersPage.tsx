@@ -46,7 +46,7 @@ export default function ProvidersPage() {
     name: [], cpf_cnpj: [], service: [], status: [],
   });
 
-  useEffect(() => { if (user && studyId) loadAll(); }, [user, studyId]);
+  useEffect(() => { if (user && studyId) loadAll(); }, [user?.id, studyId]);
 
   const loadAll = async () => {
     const [pRes, cRes] = await Promise.all([

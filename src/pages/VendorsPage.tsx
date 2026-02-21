@@ -65,7 +65,7 @@ export default function VendorsPage() {
   const formSnapshot = useRef<string>("");
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
 
-  useEffect(() => { if (user && studyId) loadVendors(); }, [user, studyId]);
+  useEffect(() => { if (user && studyId) loadVendors(); }, [user?.id, studyId]);
 
   const loadVendors = async () => {
     const { data } = await supabase.from("study_vendors")

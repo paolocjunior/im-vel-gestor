@@ -194,7 +194,7 @@ export default function BillFormPage() {
 
   useEffect(() => {
     if (user && studyId) { loadVendors(); loadBanks(); loadCostCenters(); }
-  }, [user, studyId]);
+  }, [user?.id, studyId]);
 
   const STORAGE_KEY = `bill_form_draft_${studyId}`;
 
@@ -224,7 +224,7 @@ export default function BillFormPage() {
 
   useEffect(() => {
     if (user && !isNew) loadBill();
-  }, [user, billId]);
+  }, [user?.id, billId]);
 
   useEffect(() => {
     if (effectiveBillId && studyId) loadAttachments();
