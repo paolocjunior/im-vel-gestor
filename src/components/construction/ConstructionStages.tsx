@@ -1119,7 +1119,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
         <div
           className={cn(
             "flex items-center gap-1.5 py-2 px-2 border-b border-border/50 hover:brightness-95 transition-all",
-            stage.level === 0 && "font-semibold"
+            hasChildren && "font-semibold"
           )}
           style={{ paddingLeft: `${depth * 20 + 8}px`, backgroundColor: bgColor }}
         >
