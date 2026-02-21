@@ -1066,9 +1066,9 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
             <div className="w-20 h-8" />
           )}
 
-          {/* Período for parent - show computed period when collapsed */}
-          {!isExpanded && stagePeriod && (stagePeriod.minDate || stagePeriod.maxDate) ? (
-            <div className="w-[120px] h-8 flex items-center text-muted-foreground px-1 gap-1">
+          {/* Período for parent - always show aggregated period */}
+          {stagePeriod && (stagePeriod.minDate || stagePeriod.maxDate) ? (
+            <div className="w-[120px] h-8 flex items-center text-foreground/80 px-1 gap-1">
               <CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground/50" />
               <span className="truncate">
                 {stagePeriod.minDate ? formatDateShort(stagePeriod.minDate) : "?"}-{stagePeriod.maxDate ? formatDateShort(stagePeriod.maxDate) : "?"}
