@@ -75,7 +75,7 @@ export default function ConstructionPage() {
 
   const handleViewChange = (view: ViewType) => {
     if (view === "financial") {
-      navigate(`/studies/${studyId}/bills`);
+      navigate(`/studies/${studyId}/bills?from=${encodeURIComponent(`/studies/${studyId}/construction`)}`);
       return;
     }
     if (activeView === "stages" && view !== "stages" && incompleteStageNames.length > 0) {
