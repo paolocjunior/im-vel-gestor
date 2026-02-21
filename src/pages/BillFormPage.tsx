@@ -61,7 +61,12 @@ export default function BillFormPage() {
 
   // Dynamic cost centers from DB
   const [dbCostCenters, setDbCostCenters] = useState<{ id: string; name: string; categories: string[] }[]>([]);
-  const costCenterOptions = dbCostCenters.length > 0 ? dbCostCenters.map(cc => cc.name) : Object.keys(COST_CENTERS);
+  const sortWithOutrosLast = (items: string[]) => {
+    const outros = items.filter(i => i.toLowerCase() === "outros");
+    const rest = items.filter(i => i.toLowerCase() !== "outros").sort((a, b) => a.localeCompare(b, "pt-BR"));
+    return [...rest, ...outros];
+  };
+  const costCenterOptions = sortWithOutrosLast(dbCostCenters.length > 0 ? dbCostCenters.map(cc => cc.name) : Object.keys(COST_CENTERS));
 
   // Bill form
   const [vendorId, setVendorId] = useState("");
@@ -123,8 +128,8 @@ export default function BillFormPage() {
   const categoryOptions = useMemo(() => {
     if (!costCenter) return [];
     const dbCC = dbCostCenters.find(cc => cc.name === costCenter);
-    if (dbCC) return dbCC.categories;
-    return COST_CENTERS[costCenter] || [];
+    const raw = dbCC ? dbCC.categories : (COST_CENTERS[costCenter] || []);
+    return sortWithOutrosLast(raw);
   }, [costCenter, dbCostCenters]);
 
   // Unsaved changes tracking
