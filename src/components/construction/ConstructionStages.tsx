@@ -49,7 +49,52 @@ interface StageRow {
   area_m2: number;
   status: string;
   dependency_id: string | null;
+  stage_type: string | null;
 }
+
+type StageType = 'servico' | 'mao_de_obra' | 'material' | 'taxas';
+
+const STAGE_TYPE_OPTIONS: { value: StageType; label: string }[] = [
+  { value: 'servico', label: 'Serviço (Executável)' },
+  { value: 'mao_de_obra', label: 'Mão de Obra' },
+  { value: 'material', label: 'Material (Compra)' },
+  { value: 'taxas', label: 'Taxas' },
+];
+
+const getStageTypeLabel = (type: string | null): string => {
+  switch (type) {
+    case 'servico': return 'Serviço';
+    case 'mao_de_obra': return 'Mão de Obra';
+    case 'material': return 'Material';
+    case 'taxas': return 'Taxas';
+    default: return '—';
+  }
+};
+
+const getStatusOptionsForType = (type: string | null) => {
+  if (type === 'material') {
+    return [
+      { value: 'pending', label: '—' },
+      { value: 'orcamento', label: 'Orçamento' },
+      { value: 'pedido', label: 'Pedido' },
+      { value: 'recebido', label: 'Recebido' },
+      { value: 'utilizado', label: 'Utilizado' },
+    ];
+  }
+  if (type === 'taxas') {
+    return [
+      { value: 'em_aberto', label: 'Em Aberto' },
+      { value: 'pago', label: 'Pago' },
+    ];
+  }
+  // servico, mao_de_obra, default
+  return [
+    { value: 'pending', label: '—' },
+    { value: 'stopped', label: 'Parado' },
+    { value: 'in_progress', label: 'Em andamento' },
+    { value: 'finished', label: 'Finalizado' },
+  ];
+};
 
 interface Props {
   studyId: string;
@@ -118,7 +163,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
   const fetchStages = useCallback(async () => {
     const { data } = await supabase
       .from("construction_stages" as any)
-      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status, dependency_id")
+      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status, dependency_id, stage_type")
       .eq("study_id", studyId)
       .eq("is_deleted", false)
       .order("position");
@@ -141,6 +186,8 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       const incompleteLeaves = stages.filter(s => {
         const hasChildren = stages.some(c => c.parent_id === s.id);
         if (hasChildren) return false;
+        if (!s.stage_type) return true; // No type selected yet
+        if (s.stage_type === 'taxas') return s.total_value <= 0;
         return s.quantity <= 0 || s.unit_price <= 0;
       });
       onIncompleteStagesChange(incompleteLeaves.map(s => `${s.code} - ${s.name}`));
@@ -206,7 +253,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     if (!dataLossTarget) return;
     await supabase
       .from("construction_stages" as any)
-      .update({ unit_id: null, quantity: 0, unit_price: 0, total_value: 0, area_m2: 0 })
+      .update({ unit_id: null, quantity: 0, unit_price: 0, total_value: 0, area_m2: 0, stage_type: null })
       .eq("id", dataLossTarget.id);
     setAddParentId(dataLossTarget.id);
     setDataLossTarget(null);
@@ -243,7 +290,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
     const { data: freshStages } = await supabase
       .from("construction_stages" as any)
-      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status, dependency_id")
+      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status, dependency_id, stage_type")
       .eq("study_id", studyId)
       .eq("is_deleted", false)
       .order("position");
@@ -396,7 +443,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
     const { data: freshStages } = await supabase
       .from("construction_stages" as any)
-      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status, dependency_id")
+      .select("id, parent_id, catalog_id, code, name, level, position, unit_id, quantity, unit_price, total_value, start_date, end_date, area_m2, status, dependency_id, stage_type")
       .eq("study_id", studyId)
       .eq("is_deleted", false)
       .order("position");
@@ -424,7 +471,6 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     const parentId = childStage.parent_id;
     const siblings = currentStages.filter(s => s.parent_id === parentId);
 
-    // Check all siblings' effective status (considering the one being changed)
     const allFinished = siblings.every(s => {
       const effectiveStatus = s.id === childStageId ? newStatus : s.status;
       return effectiveStatus === "finished";
@@ -432,10 +478,8 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
     if (allFinished) {
       await supabase.from("construction_stages" as any).update({ status: "finished" }).eq("id", parentId);
-      // Continue propagating up
       await propagateStatusUp(parentId, "finished", currentStages);
     } else {
-      // If parent was finished but now a child isn't, reset parent
       const parent = currentStages.find(s => s.id === parentId);
       if (parent?.status === "finished") {
         await supabase.from("construction_stages" as any).update({ status: "pending" }).eq("id", parentId);
@@ -445,6 +489,23 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
   const handleFieldChange = async (stageId: string, field: string, value: any) => {
     const update: any = { [field]: value };
+    
+    // When changing stage_type, reset status to appropriate default and clear incompatible fields
+    if (field === "stage_type") {
+      if (value === 'taxas') {
+        // Taxas: clear unit/qty/unit_price, set status to em_aberto
+        update.unit_id = null;
+        update.quantity = 0;
+        update.unit_price = 0;
+        update.status = 'em_aberto';
+        update.end_date = null; // Only uses start_date as vencimento
+      } else if (value === 'material') {
+        update.status = 'pending';
+      } else {
+        update.status = 'pending';
+      }
+    }
+    
     if (field === "quantity" || field === "unit_price") {
       const stage = stages.find((s) => s.id === stageId);
       if (stage) {
@@ -460,7 +521,6 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       const stage = stages.find(s => s.id === stageId);
       if (stage) {
         const children = stages.filter(s => s.parent_id === stageId);
-        // If this is a parent (macro), propagate status down to all descendants
         if (children.length > 0) {
           const allDescendantIds = collectAllDescendants(stageId);
           if (allDescendantIds.length > 0) {
@@ -469,12 +529,9 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
               .in("id", allDescendantIds);
           }
         }
-        // Propagate up: check if all siblings are finished → mark parent finished
         await propagateStatusUp(stageId, value, stages);
       }
     }
-
-    // Dependency is now per-stage (not propagated to descendants)
     
     fetchStages();
     onStagesChanged();
@@ -488,11 +545,19 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     onStagesChanged();
   };
 
+  const handleSingleDateChange = async (stageId: string, date: string | null) => {
+    await supabase.from("construction_stages" as any)
+      .update({ start_date: date, end_date: date })
+      .eq("id", stageId);
+    fetchStages();
+    onStagesChanged();
+  };
+
   /** Get available dependency options - any stage at same level under same parent, positioned before */
   const getDependencyOptions = (stage: StageRow): StageRow[] => {
     const siblings = stages.filter(s => s.parent_id === stage.parent_id).sort((a, b) => a.position - b.position);
     const idx = siblings.findIndex(s => s.id === stage.id);
-    if (idx <= 0) return []; // First sibling - no dependencies
+    if (idx <= 0) return [];
     return siblings.slice(0, idx);
   };
 
@@ -501,6 +566,12 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       case "stopped": return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
       case "in_progress": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
       case "finished": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+      case "orcamento": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+      case "pedido": return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
+      case "recebido": return "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300";
+      case "utilizado": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+      case "em_aberto": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
+      case "pago": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
       default: return "bg-muted text-muted-foreground";
     }
   };
@@ -510,6 +581,12 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       case "stopped": return "Parado";
       case "in_progress": return "Em andamento";
       case "finished": return "Finalizado";
+      case "orcamento": return "Orçamento";
+      case "pedido": return "Pedido";
+      case "recebido": return "Recebido";
+      case "utilizado": return "Utilizado";
+      case "em_aberto": return "Em Aberto";
+      case "pago": return "Pago";
       default: return "—";
     }
   };
@@ -567,10 +644,55 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     );
   }
 
-  // Track which field is being edited: "unit-{id}", "qty-{id}", "price-{id}", "dep-{id}", "period-{id}", "status-{id}"
+  function SingleDatePicker({ stage, autoOpen, onClose }: { stage: StageRow; autoOpen?: boolean; onClose?: () => void }) {
+    const [open, setOpen] = useState(autoOpen ?? false);
+    const currentDate = stage.start_date ? new Date(stage.start_date + "T12:00:00") : undefined;
+
+    const handleSelect = (selected: Date | undefined) => {
+      if (!selected) return;
+      const fmt = format(selected, "yyyy-MM-dd");
+      handleSingleDateChange(stage.id, fmt);
+      setOpen(false);
+      onClose?.();
+    };
+
+    const handleOpenChange = (v: boolean) => {
+      setOpen(v);
+      if (!v) onClose?.();
+    };
+
+    const displayText = stage.start_date ? formatDateShort(stage.start_date) : "";
+
+    return (
+      <Popover open={open} onOpenChange={handleOpenChange}>
+        <PopoverTrigger asChild>
+          <button
+            className={cn(
+              "w-[120px] h-8 text-xs text-left px-2 rounded-md border border-input bg-background/80 flex items-center gap-1",
+              !displayText && "text-muted-foreground"
+            )}
+          >
+            <CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+            <span className="truncate">{displayText || "Vencimento"}</span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+          <Calendar
+            mode="single"
+            selected={currentDate}
+            onSelect={handleSelect}
+            locale={ptBR}
+            className="p-3 pointer-events-auto"
+          />
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
+  // Track which field is being edited
   const [editingField, setEditingField] = useState<string | null>(null);
 
-  /** Click-to-edit inline cell: shows text normally, input on click */
+  /** Click-to-edit inline cell */
   function InlineEditableNumber({ stageId, field, value, decimals = 2, placeholder, width, onCommit, nextFieldId }: {
     stageId: string; field: string; value: number; decimals?: number; placeholder: string; width: string;
     onCommit: (v: number) => void; nextFieldId?: string;
@@ -625,6 +747,9 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     const subIdx = getSubIndex(stage);
     const bgColor = isDark ? getStageColorDark(rootIdx, subIdx) : getStageColor(rootIdx, subIdx);
 
+    const stageType = stage.stage_type;
+    const hasType = !!stageType;
+
     const getDeepTotal = (s: StageRow): number => {
       const stageChildren = stages.filter(child => child.parent_id === s.id);
       if (stageChildren.length === 0) return s.total_value || 0;
@@ -662,6 +787,333 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       ? `${formatDateShort(stage.start_date)}-${formatDateShort(stage.end_date)}`
       : "";
 
+    const statusOptions = getStatusOptionsForType(stageType);
+
+    const renderLeafFields = () => {
+      if (!isLeaf) return null;
+
+      // First: always show Tipo selector
+      const tipoField = (
+        editingField === `tipo-${stage.id}` ? (
+          <Select
+            open
+            value={stageType || ""}
+            onValueChange={(v) => { handleFieldChange(stage.id, "stage_type", v); setEditingField(null); }}
+            onOpenChange={(open) => { if (!open) setEditingField(null); }}
+          >
+            <SelectTrigger className="w-24 h-8 text-xs"><SelectValue placeholder="Tipo" /></SelectTrigger>
+            <SelectContent>
+              {STAGE_TYPE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <div
+            className="w-24 h-8 flex items-center justify-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors"
+            onClick={() => setEditingField(`tipo-${stage.id}`)}
+          >
+            <span className={cn("text-foreground/80", !stageType && "text-muted-foreground/50")}>
+              {getStageTypeLabel(stageType)}
+            </span>
+          </div>
+        )
+      );
+
+      // If no type selected, only show Tipo and spacers
+      if (!hasType) {
+        return (
+          <>
+            {tipoField}
+            {/* Spacers for the remaining columns */}
+            <div className="w-16 h-8" />
+            <div className="w-16 h-8" />
+            <div className="w-24 h-8" />
+            <div className="w-24 h-8" />
+            <div className="w-20 h-8" />
+            <div className="w-[120px] h-8" />
+            <div className="w-[110px] h-8" />
+          </>
+        );
+      }
+
+      const isTaxas = stageType === 'taxas';
+
+      return (
+        <>
+          {tipoField}
+
+          {/* Unidade - hidden for Taxas */}
+          {isTaxas ? (
+            <div className="w-16 h-8" />
+          ) : (
+            editingField === `unit-${stage.id}` ? (
+              <Select
+                open
+                value={stage.unit_id || ""}
+                onValueChange={(v) => { handleFieldChange(stage.id, "unit_id", v); setEditingField(null); }}
+                onOpenChange={(open) => { if (!open) setEditingField(null); }}
+              >
+                <SelectTrigger className="w-16 h-8 text-xs"><SelectValue placeholder="Un." /></SelectTrigger>
+                <SelectContent>
+                  {units.map((u) => (
+                    <SelectItem key={u.id} value={u.id} className="text-xs">{u.abbreviation}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div
+                className="w-16 h-8 flex items-center justify-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors"
+                onClick={() => setEditingField(`unit-${stage.id}`)}
+              >
+                <span className={cn("text-foreground/80", !unit && "text-muted-foreground/50")}>
+                  {unit ? unit.abbreviation : "Un."}
+                </span>
+              </div>
+            )
+          )}
+
+          {/* Qtde */}
+          {isTaxas ? (
+            <div className="w-16 h-8" />
+          ) : (
+            <InlineEditableNumber
+              stageId={stage.id}
+              field="qty"
+              value={stage.quantity}
+              decimals={unit?.has_decimals ? 2 : 0}
+              placeholder="Qtde."
+              width="w-16"
+              onCommit={(v) => handleFieldChange(stage.id, "quantity", v)}
+              nextFieldId={`price-${stage.id}`}
+            />
+          )}
+
+          {/* V. Unit. - hidden for Taxas */}
+          {isTaxas ? (
+            <div className="w-24 h-8" />
+          ) : (
+            <InlineEditableNumber
+              stageId={stage.id}
+              field="price"
+              value={stage.unit_price}
+              placeholder="V. Unit."
+              width="w-24"
+              onCommit={(v) => handleFieldChange(stage.id, "unit_price", v)}
+            />
+          )}
+
+          {/* V. Total - editable only for Taxas */}
+          {isTaxas ? (
+            <InlineEditableNumber
+              stageId={stage.id}
+              field="total"
+              value={stage.total_value}
+              placeholder="V. Total"
+              width="w-24"
+              onCommit={(v) => handleFieldChange(stage.id, "total_value", v)}
+            />
+          ) : (
+            <div className="w-24 h-8 flex items-center justify-end px-1">
+              <span className="text-foreground/80 font-medium">
+                {stageTotalValue > 0 ? formatBRNumber(stageTotalValue) : "—"}
+              </span>
+            </div>
+          )}
+
+          {/* Dependência */}
+          {depOptions.length > 0 ? (
+            editingField === `dep-${stage.id}` ? (
+              <Select
+                open
+                value={stage.dependency_id || "none"}
+                onValueChange={(v) => { handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v); setEditingField(null); }}
+                onOpenChange={(open) => { if (!open) setEditingField(null); }}
+              >
+                <SelectTrigger className="w-20 h-8 text-xs">
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" className="text-xs">—</SelectItem>
+                  {depOptions.map((d) => (
+                    <SelectItem key={d.id} value={d.id} className="text-xs">{d.code}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div
+                className="w-20 h-8 flex items-center justify-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors"
+                onClick={() => setEditingField(`dep-${stage.id}`)}
+              >
+                <span className={cn("text-foreground/80", !depStage && "text-muted-foreground/50")}>
+                  {depStage ? depStage.code : "—"}
+                </span>
+              </div>
+            )
+          ) : (
+            <div className="w-20 h-8" />
+          )}
+
+          {/* Período - single date for Taxas, range for others */}
+          {isTaxas ? (
+            editingField === `period-${stage.id}` ? (
+              <SingleDatePicker stage={stage} autoOpen onClose={() => setEditingField(null)} />
+            ) : (
+              <div
+                className="w-[120px] h-8 flex items-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors gap-1"
+                onClick={() => setEditingField(`period-${stage.id}`)}
+              >
+                <CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+                <span className={cn("truncate text-foreground/80", !stage.start_date && "text-muted-foreground/50")}>
+                  {stage.start_date ? formatDateShort(stage.start_date) : "Vencimento"}
+                </span>
+              </div>
+            )
+          ) : (
+            editingField === `period-${stage.id}` ? (
+              <DateRangePicker stage={stage} autoOpen onClose={() => setEditingField(null)} />
+            ) : (
+              <div
+                className="w-[120px] h-8 flex items-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors gap-1"
+                onClick={() => setEditingField(`period-${stage.id}`)}
+              >
+                <CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+                <span className={cn("truncate text-foreground/80", !displayPeriod && "text-muted-foreground/50")}>
+                  {displayPeriod || "Período"}
+                </span>
+              </div>
+            )
+          )}
+
+          {/* Status */}
+          {editingField === `status-${stage.id}` ? (
+            <Select
+              open
+              value={stage.status || statusOptions[0].value}
+              onValueChange={(v) => { handleFieldChange(stage.id, "status", v); setEditingField(null); }}
+              onOpenChange={(open) => { if (!open) setEditingField(null); }}
+            >
+              <SelectTrigger className={cn("w-[110px] h-8 text-xs border-0", getStatusBg(stage.status))}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {statusOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <div
+              className={cn("w-[110px] h-8 flex items-center justify-center cursor-pointer rounded px-1 transition-colors", getStatusBg(stage.status))}
+              onClick={() => setEditingField(`status-${stage.id}`)}
+            >
+              {getStatusLabel(stage.status)}
+            </div>
+          )}
+        </>
+      );
+    };
+
+    const renderParentFields = () => {
+      if (isLeaf) return null;
+      return (
+        <>
+          {/* Tipo spacer */}
+          <div className="w-24 h-8" />
+          {/* Empty spacers for Unidade + Qtde + V.Unit columns */}
+          <div className="w-16 h-8" />
+          <div className="w-16 h-8" />
+          <div className="w-24 h-8" />
+          {/* V. Total for parent */}
+          <div className="w-24 h-8 flex items-center justify-end px-1">
+            <span className="text-foreground/80 font-medium">
+              {stageTotalValue > 0 ? formatBRNumber(stageTotalValue) : "—"}
+            </span>
+          </div>
+
+          {/* Dependência for parent */}
+          {depOptions.length > 0 ? (
+            editingField === `dep-${stage.id}` ? (
+              <Select
+                open
+                value={stage.dependency_id || "none"}
+                onValueChange={(v) => { handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v); setEditingField(null); }}
+                onOpenChange={(open) => { if (!open) setEditingField(null); }}
+              >
+                <SelectTrigger className="w-20 h-8 text-xs">
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" className="text-xs">—</SelectItem>
+                  {depOptions.map((d) => (
+                    <SelectItem key={d.id} value={d.id} className="text-xs">{d.code}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div
+                className="w-20 h-8 flex items-center justify-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors"
+                onClick={() => setEditingField(`dep-${stage.id}`)}
+              >
+                <span className={cn("text-foreground/80", !depStage && "text-muted-foreground/50")}>
+                  {depStage ? depStage.code : "—"}
+                </span>
+              </div>
+            )
+          ) : (
+            <div className="w-20 h-8" />
+          )}
+
+          {/* Período for parent - show computed period when collapsed */}
+          {!isExpanded && stagePeriod && (stagePeriod.minDate || stagePeriod.maxDate) ? (
+            <div className="w-[120px] h-8 flex items-center text-muted-foreground px-1 gap-1">
+              <CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground/50" />
+              <span className="truncate">
+                {stagePeriod.minDate ? formatDateShort(stagePeriod.minDate) : "?"}-{stagePeriod.maxDate ? formatDateShort(stagePeriod.maxDate) : "?"}
+              </span>
+            </div>
+          ) : (
+            <div className="w-[120px] h-8" />
+          )}
+
+          {/* Status for parent */}
+          {editingField === `status-${stage.id}` ? (
+            <Select
+              open
+              value={stage.status || "pending"}
+              onValueChange={(v) => { handleFieldChange(stage.id, "status", v); setEditingField(null); }}
+              onOpenChange={(open) => { if (!open) setEditingField(null); }}
+            >
+              <SelectTrigger className={cn("w-[110px] h-8 text-xs border-0", getStatusBg(stage.status))}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending" className="text-xs">—</SelectItem>
+                <SelectItem value="stopped" className="text-xs">
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" />Parado</span>
+                </SelectItem>
+                <SelectItem value="in_progress" className="text-xs">
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500" />Em andamento</span>
+                </SelectItem>
+                <SelectItem value="finished" className="text-xs">
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500" />Finalizado</span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          ) : (
+            <div
+              className={cn("w-[110px] h-8 flex items-center justify-center cursor-pointer rounded px-1 transition-colors", getStatusBg(stage.status))}
+              onClick={() => setEditingField(`status-${stage.id}`)}
+            >
+              {getStatusLabel(stage.status)}
+            </div>
+          )}
+        </>
+      );
+    };
+
     return (
       <div key={stage.id}>
         <div
@@ -688,236 +1140,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
           {/* Fixed columns */}
           <div className={cn("flex items-center gap-0.5 shrink-0 ml-4", stage.level === 0 ? "text-sm" : "text-xs")}>
-            {isLeaf ? (
-              <>
-                {/* Unidade - click to edit */}
-                {editingField === `unit-${stage.id}` ? (
-                  <Select
-                    open
-                    value={stage.unit_id || ""}
-                    onValueChange={(v) => { handleFieldChange(stage.id, "unit_id", v); setEditingField(null); }}
-                    onOpenChange={(open) => { if (!open) setEditingField(null); }}
-                  >
-                    <SelectTrigger className="w-16 h-8 text-xs"><SelectValue placeholder="Un." /></SelectTrigger>
-                    <SelectContent>
-                      {units.map((u) => (
-                        <SelectItem key={u.id} value={u.id} className="text-xs">{u.abbreviation}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <div
-                    className="w-16 h-8 flex items-center justify-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors"
-                    onClick={() => setEditingField(`unit-${stage.id}`)}
-                  >
-                    <span className={cn("text-foreground/80", !unit && "text-muted-foreground/50")}>
-                      {unit ? unit.abbreviation : "Un."}
-                    </span>
-                  </div>
-                )}
-
-                {/* Qtde - click to edit */}
-                <InlineEditableNumber
-                  stageId={stage.id}
-                  field="qty"
-                  value={stage.quantity}
-                  decimals={unit?.has_decimals ? 2 : 0}
-                  placeholder="Qtde."
-                  width="w-16"
-                  onCommit={(v) => handleFieldChange(stage.id, "quantity", v)}
-                  nextFieldId={`price-${stage.id}`}
-                />
-
-                {/* V. Unit. - click to edit */}
-                <InlineEditableNumber
-                  stageId={stage.id}
-                  field="price"
-                  value={stage.unit_price}
-                  placeholder="V. Unit."
-                  width="w-24"
-                  onCommit={(v) => handleFieldChange(stage.id, "unit_price", v)}
-                />
-
-                {/* V. Total - read only, inline display */}
-                <div className="w-24 h-8 flex items-center justify-end px-1">
-                  <span className="text-foreground/80 font-medium">
-                    {stageTotalValue > 0 ? formatBRNumber(stageTotalValue) : "—"}
-                  </span>
-                </div>
-
-                {/* Dependência - click to edit */}
-                {depOptions.length > 0 ? (
-                  editingField === `dep-${stage.id}` ? (
-                    <Select
-                      open
-                      value={stage.dependency_id || "none"}
-                      onValueChange={(v) => { handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v); setEditingField(null); }}
-                      onOpenChange={(open) => { if (!open) setEditingField(null); }}
-                    >
-                      <SelectTrigger className="w-20 h-8 text-xs">
-                        <SelectValue placeholder="—" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none" className="text-xs">—</SelectItem>
-                        {depOptions.map((d) => (
-                          <SelectItem key={d.id} value={d.id} className="text-xs">{d.code}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div
-                    className="w-20 h-8 flex items-center justify-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors"
-                      onClick={() => setEditingField(`dep-${stage.id}`)}
-                    >
-                      <span className={cn("text-foreground/80", !depStage && "text-muted-foreground/50")}>
-                        {depStage ? depStage.code : "—"}
-                      </span>
-                    </div>
-                  )
-                ) : (
-                  <div className="w-20 h-8" />
-                )}
-
-                {/* Período - click to edit */}
-                {editingField === `period-${stage.id}` ? (
-                  <DateRangePicker stage={stage} autoOpen onClose={() => setEditingField(null)} />
-                ) : (
-                  <div
-                    className="w-[120px] h-8 flex items-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors gap-1"
-                    onClick={() => setEditingField(`period-${stage.id}`)}
-                  >
-                    <CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
-                    <span className={cn("truncate text-foreground/80", !displayPeriod && "text-muted-foreground/50")}>
-                      {displayPeriod || "Período"}
-                    </span>
-                  </div>
-                )}
-
-                {/* Status - click to edit */}
-                {editingField === `status-${stage.id}` ? (
-                  <Select
-                    open
-                    value={stage.status || "pending"}
-                    onValueChange={(v) => { handleFieldChange(stage.id, "status", v); setEditingField(null); }}
-                    onOpenChange={(open) => { if (!open) setEditingField(null); }}
-                  >
-                    <SelectTrigger className={cn("w-[110px] h-8 text-xs border-0", getStatusBg(stage.status))}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending" className="text-xs">—</SelectItem>
-                      <SelectItem value="stopped" className="text-xs">
-                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" />Parado</span>
-                      </SelectItem>
-                      <SelectItem value="in_progress" className="text-xs">
-                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500" />Em andamento</span>
-                      </SelectItem>
-                      <SelectItem value="finished" className="text-xs">
-                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500" />Finalizado</span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <div
-                    className={cn("w-[110px] h-8 flex items-center justify-center cursor-pointer rounded px-1 transition-colors", getStatusBg(stage.status))}
-                    onClick={() => setEditingField(`status-${stage.id}`)}
-                  >
-                    {getStatusLabel(stage.status)}
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                {/* Empty spacers for Unidade + Qtde + V.Unit columns */}
-                <div className="w-16 h-8" />
-                <div className="w-16 h-8" />
-                <div className="w-24 h-8" />
-                {/* V. Total for parent */}
-                <div className="w-24 h-8 flex items-center justify-end px-1">
-                  <span className="text-foreground/80 font-medium">
-                    {stageTotalValue > 0 ? formatBRNumber(stageTotalValue) : "—"}
-                  </span>
-                </div>
-
-                {/* Dependência for parent */}
-                {depOptions.length > 0 ? (
-                  editingField === `dep-${stage.id}` ? (
-                    <Select
-                      open
-                      value={stage.dependency_id || "none"}
-                      onValueChange={(v) => { handleFieldChange(stage.id, "dependency_id", v === "none" ? null : v); setEditingField(null); }}
-                      onOpenChange={(open) => { if (!open) setEditingField(null); }}
-                    >
-                      <SelectTrigger className="w-20 h-8 text-xs">
-                        <SelectValue placeholder="—" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none" className="text-xs">—</SelectItem>
-                        {depOptions.map((d) => (
-                          <SelectItem key={d.id} value={d.id} className="text-xs">{d.code}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div
-                      className="w-20 h-8 flex items-center justify-center cursor-pointer rounded px-1 hover:bg-background/60 transition-colors"
-                      onClick={() => setEditingField(`dep-${stage.id}`)}
-                    >
-                      <span className={cn("text-foreground/80", !depStage && "text-muted-foreground/50")}>
-                        {depStage ? depStage.code : "—"}
-                      </span>
-                    </div>
-                  )
-                ) : (
-                  <div className="w-20 h-8" />
-                )}
-
-                {/* Período for parent - show computed period when collapsed */}
-                {!isExpanded && stagePeriod && (stagePeriod.minDate || stagePeriod.maxDate) ? (
-                  <div className="w-[120px] h-8 flex items-center text-muted-foreground px-1 gap-1">
-                    <CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground/50" />
-                    <span className="truncate">
-                      {stagePeriod.minDate ? formatDateShort(stagePeriod.minDate) : "?"}-{stagePeriod.maxDate ? formatDateShort(stagePeriod.maxDate) : "?"}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="w-[120px] h-8" />
-                )}
-
-                {/* Status for parent - click to edit */}
-                {editingField === `status-${stage.id}` ? (
-                  <Select
-                    open
-                    value={stage.status || "pending"}
-                    onValueChange={(v) => { handleFieldChange(stage.id, "status", v); setEditingField(null); }}
-                    onOpenChange={(open) => { if (!open) setEditingField(null); }}
-                  >
-                    <SelectTrigger className={cn("w-[110px] h-8 text-xs border-0", getStatusBg(stage.status))}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending" className="text-xs">—</SelectItem>
-                      <SelectItem value="stopped" className="text-xs">
-                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" />Parado</span>
-                      </SelectItem>
-                      <SelectItem value="in_progress" className="text-xs">
-                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-500" />Em andamento</span>
-                      </SelectItem>
-                      <SelectItem value="finished" className="text-xs">
-                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500" />Finalizado</span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <div
-                    className={cn("w-[110px] h-8 flex items-center justify-center cursor-pointer rounded px-1 transition-colors", getStatusBg(stage.status))}
-                    onClick={() => setEditingField(`status-${stage.id}`)}
-                  >
-                    {getStatusLabel(stage.status)}
-                  </div>
-                )}
-              </>
-            )}
+            {isLeaf ? renderLeafFields() : renderParentFields()}
 
             {/* Reorder buttons */}
             <div className="flex flex-col">
@@ -970,7 +1193,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <h2 className="text-lg font-bold text-foreground">Etapas</h2>
 
       <div className="rounded-xl p-4 flex items-center justify-between" style={{ backgroundColor: isDark ? 'hsl(180, 28%, 12%)' : 'hsl(180, 28%, 88%)' }}>
@@ -992,6 +1215,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
         <div className="flex items-center px-4 py-3 bg-muted/30 border-b">
           <span className="text-sm font-semibold text-foreground flex-1 min-w-0">Etapas</span>
           <div className="flex items-center gap-0.5 shrink-0 ml-4">
+            <span className="text-xs text-muted-foreground w-24 text-center">Tipo</span>
             <span className="text-xs text-muted-foreground w-16 text-center">Unidade</span>
             <span className="text-xs text-muted-foreground w-16 text-right">Qtde.</span>
             <span className="text-xs text-muted-foreground w-24 text-right">V. Unit.</span>

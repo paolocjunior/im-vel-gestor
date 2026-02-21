@@ -278,6 +278,7 @@ export type Database = {
           parent_id: string | null
           position: number
           quantity: number
+          stage_type: string | null
           start_date: string | null
           status: string
           study_id: string
@@ -302,6 +303,7 @@ export type Database = {
           parent_id?: string | null
           position?: number
           quantity?: number
+          stage_type?: string | null
           start_date?: string | null
           status?: string
           study_id: string
@@ -326,6 +328,7 @@ export type Database = {
           parent_id?: string | null
           position?: number
           quantity?: number
+          stage_type?: string | null
           start_date?: string | null
           status?: string
           study_id?: string
