@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import GlobalTopbar from "@/components/GlobalTopbar";
-import { ChevronDown, ChevronRight, LayoutDashboard, Layers, Calculator, ShoppingCart, Package, Wallet, FileBarChart, ArrowLeft, GanttChart as GanttChartIcon, CalendarRange, PanelLeftClose, PanelLeft } from "lucide-react";
+import { LayoutDashboard, Layers, Calculator, ShoppingCart, Package, Wallet, FileBarChart, ArrowLeft, GanttChart as GanttChartIcon, CalendarRange, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
@@ -11,24 +11,16 @@ import ConstructionDashboard from "@/components/construction/ConstructionDashboa
 import ConstructionStages from "@/components/construction/ConstructionStages";
 import GanttChart from "@/components/construction/GanttChart";
 import PhysicalFinancialSchedule from "@/components/construction/PhysicalFinancialSchedule";
+import MeasurementExecution from "@/components/construction/MeasurementExecution";
 
-type ViewType = "dashboard" | "stages" | "budget" | "purchase-orders" | "purchases" | "financial" | "reports" | "gantt" | "physical-financial";
+type ViewType = "dashboard" | "stages" | "measurement" | "budget" | "purchase-orders" | "purchases" | "financial" | "reports" | "gantt" | "physical-financial";
 
-interface StageTreeNode {
-  id: string;
-  code: string;
-  name: string;
-  level: number;
-  children: StageTreeNode[];
-}
 
 export default function ConstructionPage() {
   const { id: studyId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [activeView, setActiveView] = useState<ViewType>("dashboard");
-  const [stagesExpanded, setStagesExpanded] = useState(true);
-  const [stageTree, setStageTree] = useState<StageTreeNode[]>([]);
-  const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
+  const [stageTree, setStageTree] = useState<any[]>([]);
   const [studyName, setStudyName] = useState("");
   const [incompleteStageNames, setIncompleteStageNames] = useState<string[]>([]);
   const [pendingView, setPendingView] = useState<ViewType | null>(null);
@@ -61,7 +53,7 @@ export default function ConstructionPage() {
       map.get(pid)!.push(s);
     }
 
-    function buildTree(parentId: string | null): StageTreeNode[] {
+    function buildTree(parentId: string | null): any[] {
       const children = map.get(parentId) || [];
       return children.map((s) => ({
         id: s.id,
@@ -80,14 +72,6 @@ export default function ConstructionPage() {
     fetchStageTree();
   }, [fetchStudy, fetchStageTree]);
 
-  const toggleStageExpand = (id: string) => {
-    setExpandedStages((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   const handleViewChange = (view: ViewType) => {
     if (view === "financial") {
@@ -104,6 +88,7 @@ export default function ConstructionPage() {
   const menuItems: { key: ViewType; label: string; icon: React.ElementType }[] = [
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { key: "stages", label: "Etapas", icon: Layers },
+    { key: "measurement", label: "Medição/Execução", icon: FileBarChart },
     { key: "physical-financial", label: "Cronograma Físico-Financeiro", icon: CalendarRange },
     { key: "gantt", label: "Cronograma de Gantt", icon: GanttChartIcon },
     { key: "budget", label: "Orçamento", icon: Calculator },
@@ -113,29 +98,6 @@ export default function ConstructionPage() {
     { key: "reports", label: "Relatórios", icon: FileBarChart },
   ];
 
-  function renderStageNode(node: StageTreeNode, depth: number) {
-    const hasChildren = node.children.length > 0;
-    const isExpanded = expandedStages.has(node.id);
-    return (
-      <div key={node.id}>
-        <button
-          className="flex items-center gap-1 w-full text-left py-1 px-1 rounded hover:bg-muted/50 text-sm transition-colors"
-          style={{ paddingLeft: `${(depth + 1) * 12}px` }}
-          onClick={() => {
-            if (hasChildren) toggleStageExpand(node.id);
-          }}
-        >
-          {hasChildren ? (
-            isExpanded ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-          )}
-          <span className="truncate text-foreground/80">{node.code} - {node.name}</span>
-        </button>
-        {hasChildren && isExpanded && node.children.map((c) => renderStageNode(c, depth + 1))}
-      </div>
-    );
-  }
 
   function renderContent() {
     if (!studyId) return null;
@@ -150,6 +112,8 @@ export default function ConstructionPage() {
             onIncompleteStagesChange={setIncompleteStageNames}
           />
         );
+      case "measurement":
+        return <MeasurementExecution studyId={studyId} />;
       case "physical-financial":
         return <PhysicalFinancialSchedule studyId={studyId} />;
       case "gantt":
@@ -163,7 +127,7 @@ export default function ConstructionPage() {
     }
   }
 
-  const isFullWidthView = activeView === "physical-financial" || activeView === "gantt" || activeView === "stages";
+  const isFullWidthView = activeView === "physical-financial" || activeView === "gantt" || activeView === "stages" || activeView === "measurement";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -252,32 +216,7 @@ export default function ConstructionPage() {
                               <item.icon className="h-4 w-4 shrink-0" />
                               <span className="truncate">{item.label}</span>
                             </button>
-                            {item.key === "stages" && (
-                              <button
-                                className="shrink-0 p-0.5 rounded hover:bg-muted/80"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setStagesExpanded(!stagesExpanded);
-                                }}
-                              >
-                                {stagesExpanded
-                                  ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                                  : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
-                              </button>
-                            )}
                           </div>
-                          {/* Stage tree under Etapas */}
-                          {item.key === "stages" && stagesExpanded && (
-                            <div className="mt-1 mb-1">
-                              {stageTree.length === 0 ? (
-                                <p className="text-xs text-muted-foreground px-3 py-1 italic">
-                                  Nenhuma etapa criada
-                                </p>
-                              ) : (
-                                stageTree.map((n) => renderStageNode(n, 0))
-                              )}
-                            </div>
-                          )}
                         </>
                       )}
                     </div>

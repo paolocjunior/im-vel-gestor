@@ -216,13 +216,9 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
     fetchStages();
   };
 
-  const handleCellClick = (stageId: string, colKey: string, monthKeys: string[]) => {
-    const hasChildren = stages.some(s => s.parent_id === stageId);
-    if (hasChildren) return;
-    const currentVal = getStageGroupValue(stageId, monthKeys);
-    setEditingCell({ stageId, colKey });
-    // Start editing with digits only so the mask works from scratch
-    setEditValue(currentVal > 0 ? formatBRNumber(currentVal) : "");
+  // Editing disabled - fields are now read-only
+  const handleCellClick = (_stageId: string, _colKey: string, _monthKeys: string[]) => {
+    // No-op: editing disabled
   };
 
   const handleEditChange = (raw: string) => {
@@ -407,26 +403,12 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                       {plannedDuration !== null ? `${plannedDuration} dias` : "-"}
                     </td>
                     {/* Início da Etapa */}
-                    <td className={cn("border-r px-1 text-center", fontSize)} style={{ minWidth: 110 }}>
-                      {hasChildren ? (
-                        <span className="text-foreground/70">{actualDates.start ? formatDateBR(actualDates.start) : "-"}</span>
-                      ) : (
-                        <DatePickerCell
-                          value={stage.actual_start_date}
-                          onChange={(d) => saveActualDate(stage.id, "actual_start_date", d)}
-                        />
-                      )}
+                    <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 110 }}>
+                      {actualDates.start ? formatDateBR(actualDates.start) : "-"}
                     </td>
                     {/* Término da Etapa */}
-                    <td className={cn("border-r px-1 text-center", fontSize)} style={{ minWidth: 110 }}>
-                      {hasChildren ? (
-                        <span className="text-foreground/70">{actualDates.end ? formatDateBR(actualDates.end) : "-"}</span>
-                      ) : (
-                        <DatePickerCell
-                          value={stage.actual_end_date}
-                          onChange={(d) => saveActualDate(stage.id, "actual_end_date", d)}
-                        />
-                      )}
+                    <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 110 }}>
+                      {actualDates.end ? formatDateBR(actualDates.end) : "-"}
                     </td>
                     {/* Duração real */}
                     <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 70 }}>
@@ -440,30 +422,10 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                       const pct = stageTotal > 0 ? (val / stageTotal) * 100 : 0;
                       const isEditing = editingCell?.stageId === stage.id && editingCell?.colKey === col.key;
 
-                      if (isEditing) {
-                        return (
-                          <td key={col.key} className="border-r px-0.5" style={{ minWidth: COL_WIDTH_MONTH }}>
-                            <Input
-                              autoFocus
-                              className="h-8 text-xs text-right w-full"
-                              inputMode="numeric"
-                              value={editValue}
-                              onChange={e => handleEditChange(e.target.value)}
-                              onBlur={commitEdit}
-                              onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") { setEditingCell(null); setEditValue(""); } }}
-                            />
-                          </td>
-                        );
-                      }
-
                       return (
                         <td
                           key={col.key}
-                          className={cn(
-                            "border-r px-1 text-right transition-colors",
-                            !hasChildren && "cursor-text hover:bg-accent/20"
-                          )}
-                          onClick={() => handleCellClick(stage.id, col.key, col.monthKeys)}
+                          className="border-r px-1 text-right"
                           style={{ minWidth: COL_WIDTH_MONTH }}
                         >
                           {val > 0 ? (

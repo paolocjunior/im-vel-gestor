@@ -1068,14 +1068,14 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
           {/* Período for parent - always show aggregated period */}
           {stagePeriod && (stagePeriod.minDate || stagePeriod.maxDate) ? (
-            <div className="w-[120px] h-8 flex items-center text-foreground/80 px-1 gap-1">
+            <div className="w-[160px] h-8 flex items-center text-foreground/80 px-1 gap-1">
               <CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground/50" />
-              <span className="truncate">
-                {stagePeriod.minDate ? formatDateShort(stagePeriod.minDate) : "?"}-{stagePeriod.maxDate ? formatDateShort(stagePeriod.maxDate) : "?"}
+              <span className="whitespace-nowrap">
+                {stagePeriod.minDate ? formatDateShort(stagePeriod.minDate) : "?"} - {stagePeriod.maxDate ? formatDateShort(stagePeriod.maxDate) : "?"}
               </span>
             </div>
           ) : (
-            <div className="w-[120px] h-8" />
+            <div className="w-[160px] h-8" />
           )}
 
           {/* Status for parent */}
