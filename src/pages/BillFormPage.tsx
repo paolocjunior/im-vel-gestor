@@ -48,6 +48,8 @@ export default function BillFormPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const mode = searchParams.get("mode") || "create";
+  const fromParam = searchParams.get("from") || "";
+  const billsListUrl = `/studies/${studyId}/bills${fromParam ? `?from=${fromParam}` : ""}`;
   const isView = mode === "view";
   const isClone = mode === "clone";
   const isEdit = mode === "edit";
@@ -285,7 +287,7 @@ export default function BillFormPage() {
 
   const loadBill = async () => {
     const { data: bill } = await supabase.from("bills").select("*").eq("id", billId).single();
-    if (!bill) { navigate(`/studies/${studyId}/bills`); return; }
+    if (!bill) { navigate(billsListUrl); return; }
 
     setVendorId(bill.vendor_id || "");
     setDescription(bill.description);
@@ -691,7 +693,7 @@ export default function BillFormPage() {
       toast.success("Despesa atualizada!");
       markSaved();
       sessionStorage.removeItem(STORAGE_KEY);
-      navigate(`/studies/${studyId}/bills`);
+      navigate(billsListUrl);
       return;
     }
 
@@ -737,7 +739,7 @@ export default function BillFormPage() {
       toast.success("Despesa criada!");
       markSaved();
       sessionStorage.removeItem(STORAGE_KEY);
-      navigate(`/studies/${studyId}/bills`);
+      navigate(billsListUrl);
     }
   };
 
@@ -751,7 +753,7 @@ export default function BillFormPage() {
     toast.success("Despesa criada!");
     markSaved();
     sessionStorage.removeItem(STORAGE_KEY);
-    navigate(`/studies/${studyId}/bills`);
+    navigate(billsListUrl);
   };
 
   const pageTitle = isView ? "Visualizar Despesa" : isClone ? "Clonar Despesa" : isEdit ? "Editar Despesa" : "Nova Despesa";
@@ -1061,13 +1063,13 @@ export default function BillFormPage() {
         <div className="flex gap-3">
           {isView ? (
             <>
-              <Button onClick={() => navigate(`/studies/${studyId}/bills/${billId}?mode=edit`)}>Editar</Button>
-              <Button variant="outline" onClick={() => navigate(`/studies/${studyId}/bills`)}>Voltar</Button>
+              <Button onClick={() => navigate(`/studies/${studyId}/bills/${billId}?mode=edit${fromParam ? `&from=${fromParam}` : ""}`)}>Editar</Button>
+              <Button variant="outline" onClick={() => navigate(billsListUrl)}>Voltar</Button>
             </>
           ) : (
             <>
               <Button onClick={saveBill} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
-              <Button variant="outline" onClick={() => guardedNavigate(`/studies/${studyId}/bills`)}>Voltar</Button>
+              <Button variant="outline" onClick={() => guardedNavigate(billsListUrl)}>Voltar</Button>
             </>
           )}
         </div>

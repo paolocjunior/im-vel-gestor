@@ -273,7 +273,7 @@ export default function MeasurementExecution({ studyId }: Props) {
           return;
         }
         // Navigate to new bill page with pre-filled data
-        navigate(`/studies/${studyId}/bills/new?from=measurement&stageId=${stage.id}&stageName=${encodeURIComponent(`Taxas - ${stage.code} - ${stage.name}`)}&amount=${stage.total_value}`);
+        navigate(`/studies/${studyId}/bills/new?from=${encodeURIComponent(`/studies/${studyId}/construction`)}&stageId=${stage.id}&stageName=${encodeURIComponent(`Taxas - ${stage.code} - ${stage.name}`)}&amount=${stage.total_value}`);
         break;
       }
       case "pagar":

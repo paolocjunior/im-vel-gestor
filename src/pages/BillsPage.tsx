@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -84,6 +84,8 @@ function FilterDropdown({ label, options, selected, onToggle }: {
 export default function BillsPage() {
   const { id: studyId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fromParam = searchParams.get("from") || "";
   const { user } = useAuth();
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [billsWithAttachments, setBillsWithAttachments] = useState<Set<string>>(new Set());
@@ -381,16 +383,16 @@ export default function BillsPage() {
         handleReopen(inst.id);
         break;
       case "view":
-        navigate(`/studies/${studyId}/bills/${inst.bill_id}?mode=view`);
+        navigate(`/studies/${studyId}/bills/${inst.bill_id}?mode=view${fromParam ? `&from=${fromParam}` : ""}`);
         break;
       case "edit":
-        navigate(`/studies/${studyId}/bills/${inst.bill_id}?mode=edit`);
+        navigate(`/studies/${studyId}/bills/${inst.bill_id}?mode=edit${fromParam ? `&from=${fromParam}` : ""}`);
         break;
       case "delete":
         handleDeleteClick(inst);
         break;
       case "clone":
-        navigate(`/studies/${studyId}/bills/${inst.bill_id}?mode=clone`);
+        navigate(`/studies/${studyId}/bills/${inst.bill_id}?mode=clone${fromParam ? `&from=${fromParam}` : ""}`);
         break;
     }
   };
@@ -421,8 +423,14 @@ export default function BillsPage() {
         <h1 className="text-xl font-bold">Financeiro</h1>
 
         <div className="flex items-center justify-between">
-          <Button size="sm" onClick={() => navigate(`/studies/${studyId}/bills/new`)}>Nova Despesa</Button>
-          <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
+          <Button size="sm" onClick={() => navigate(`/studies/${studyId}/bills/new${fromParam ? `?from=${fromParam}` : ""}`)}>Nova Despesa</Button>
+          <Button variant="outline" size="sm" onClick={() => {
+            if (fromParam) {
+              navigate(fromParam);
+            } else {
+              navigate(`/studies/${studyId}/dashboard`);
+            }
+          }}>
             <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
           </Button>
         </div>
