@@ -189,6 +189,7 @@ export type Database = {
           quantity: number
           stage_id: string
           study_id: string
+          unit_price: number
           updated_at: string
         }
         Insert: {
@@ -203,6 +204,7 @@ export type Database = {
           quantity?: number
           stage_id: string
           study_id: string
+          unit_price?: number
           updated_at?: string
         }
         Update: {
@@ -217,6 +219,7 @@ export type Database = {
           quantity?: number
           stage_id?: string
           study_id?: string
+          unit_price?: number
           updated_at?: string
         }
         Relationships: [
@@ -309,6 +312,7 @@ export type Database = {
           study_id: string
           updated_at: string
           value: number
+          value_type: string
         }
         Insert: {
           created_at?: string
@@ -318,6 +322,7 @@ export type Database = {
           study_id: string
           updated_at?: string
           value?: number
+          value_type?: string
         }
         Update: {
           created_at?: string
@@ -327,6 +332,7 @@ export type Database = {
           study_id?: string
           updated_at?: string
           value?: number
+          value_type?: string
         }
         Relationships: [
           {
