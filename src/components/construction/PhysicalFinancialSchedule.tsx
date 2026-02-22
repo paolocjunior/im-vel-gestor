@@ -42,7 +42,7 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
   const fetchStages = useCallback(async () => {
     const { data } = await supabase
       .from("construction_stages" as any)
-      .select("id, parent_id, code, name, level, position, start_date, end_date, actual_start_date, actual_end_date, status, total_value")
+      .select("id, parent_id, code, name, level, position, start_date, end_date, actual_start_date, actual_end_date, status, total_value, stage_type")
       .eq("study_id", studyId)
       .eq("is_deleted", false)
       .order("position");
@@ -341,9 +341,13 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                 const isRoot = !stage.parent_id;
                 const peso = isRoot && grandTotal > 0 && stageTotal > 0 ? (stageTotal / grandTotal) * 100 : null;
 
+                // For taxas stages, Data Inicial = Data Final = due date (start_date)
+                const isTaxas = stage.stage_type === 'taxas';
                 const plannedDates = hasChildren
                   ? getEffectiveDates(stage, stages)
-                  : { start: stage.start_date, end: stage.end_date };
+                  : isTaxas
+                    ? { start: stage.start_date, end: stage.start_date }
+                    : { start: stage.start_date, end: stage.end_date };
 
                 const plannedDuration = plannedDates.start && plannedDates.end
                   ? diffDays(plannedDates.start, plannedDates.end) + 1
