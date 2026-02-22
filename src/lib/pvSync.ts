@@ -127,20 +127,27 @@ export async function syncAllPVMonthly(studyId: string): Promise<void> {
   }
 
   // Delete all existing planned values for this study
-  await supabase
+  const { error: delError } = await supabase
     .from("construction_stage_monthly_values" as any)
     .delete()
     .eq("study_id", studyId)
     .eq("value_type", "planned");
 
+  if (delError) {
+    console.error("[pvSync] delete error:", delError);
+    return;
+  }
+
   // Batch insert (Supabase handles arrays up to ~1000 rows)
   if (allInserts.length > 0) {
-    // Insert in chunks of 500 to be safe
     for (let i = 0; i < allInserts.length; i += 500) {
       const chunk = allInserts.slice(i, i + 500);
-      await supabase
+      const { error: insError } = await supabase
         .from("construction_stage_monthly_values" as any)
         .insert(chunk as any);
+      if (insError) {
+        console.error("[pvSync] insert error:", insError);
+      }
     }
   }
 }
