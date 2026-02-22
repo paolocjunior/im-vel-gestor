@@ -224,7 +224,9 @@ export default function ProviderFormPage() {
       const { data } = await supabase.from("study_providers").insert(payload).select("id").single();
       if (data) {
         setSavedProviderId(data.id);
-        navigate(`/studies/${studyId}/providers/${data.id}/edit`, { replace: true });
+        // Preserve search params (especially 'from') when redirecting after creation
+        const params = new URLSearchParams(searchParams);
+        navigate(`/studies/${studyId}/providers/${data.id}/edit?${params.toString()}`, { replace: true });
       }
     }
     setSaving(false);
