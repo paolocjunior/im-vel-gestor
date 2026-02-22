@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ChevronDown, ChevronRight, CalendarIcon, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRNumber } from "@/components/ui/masked-number-input";
+import { formatCPFCNPJ, formatPhone, validateCPF, validateCNPJ } from "@/lib/cnpjLookup";
 import { toast } from "sonner";
 import { PAYMENT_METHODS, todayISO } from "@/lib/billConstants";
 
@@ -198,6 +199,8 @@ export default function MeasurementExecution({ studyId }: Props) {
   const saveNewProvider = async () => {
     if (!newProviderName.trim()) { toast.error("Nome completo é obrigatório."); return; }
     if (!newProviderCpfCnpj.trim()) { toast.error("CPF/CNPJ é obrigatório."); return; }
+    if (newProviderType === "PF" && !validateCPF(newProviderCpfCnpj)) { toast.error("CPF inválido."); return; }
+    if (newProviderType === "PJ" && !validateCNPJ(newProviderCpfCnpj)) { toast.error("CNPJ inválido."); return; }
     setSavingProvider(true);
     const { data, error } = await supabase.from("study_providers").insert({
       full_name: newProviderName.trim(),
@@ -514,7 +517,7 @@ export default function MeasurementExecution({ studyId }: Props) {
             provider_id: moProviderId,
             study_id: studyId,
             service: moStage.name,
-            amount: moStage.total_value || 0,
+            amount: 0,
             billing_model: "FIXED",
             start_date: moStage.start_date || todayISO(),
             end_date: moStage.end_date || null,
@@ -555,6 +558,8 @@ export default function MeasurementExecution({ studyId }: Props) {
           return sum + (m.measurement_type === 'reversal' ? -Number(m.quantity) : Number(m.quantity));
         }, 0);
 
+        const valorTotal = totalApontado * moStage.unit_price;
+
         let details = `Total de ${unitAbbrev} planejadas: ${formatBRNumber(moStage.quantity, unit?.has_decimals ? 2 : 0)}${unitAbbrev}\n\n`;
         for (const m of allMeasurements as any[]) {
           const [y, mo, d] = m.measurement_date.split("-");
@@ -562,22 +567,14 @@ export default function MeasurementExecution({ studyId }: Props) {
           details += `${prefix}${d}/${mo}/${y} - ${formatBRNumber(Number(m.quantity), unit?.has_decimals ? 2 : 0)}${unitAbbrev} apontadas\n`;
         }
 
-        // Check if stage is finished (total >= planned)
-        const isFinished = totalApontado >= moStage.quantity;
-        if (isFinished) {
-          details += `\nTotal de ${unitAbbrev} apontadas: ${formatBRNumber(totalApontado, unit?.has_decimals ? 2 : 0)}${unitAbbrev}\n`;
-          const valorTotal = totalApontado * moStage.unit_price;
-          details += `Valor total (R$ ${formatBRNumber(moStage.unit_price)}/${unitAbbrev}) = R$ ${formatBRNumber(valorTotal)}`;
+        // Always show running total
+        details += `\nTotal de ${unitAbbrev} apontadas: ${formatBRNumber(totalApontado, unit?.has_decimals ? 2 : 0)}${unitAbbrev}\n`;
+        details += `Valor acumulado (R$ ${formatBRNumber(moStage.unit_price)}/${unitAbbrev}) = R$ ${formatBRNumber(valorTotal)}`;
 
-          // Update contract amount with actual total
-          await supabase.from("study_provider_contracts")
-            .update({ amount: valorTotal, details: details.trim() })
-            .eq("id", contractId);
-        } else {
-          await supabase.from("study_provider_contracts")
-            .update({ details: details.trim() })
-            .eq("id", contractId);
-        }
+        // Always update contract amount with accumulated value
+        await supabase.from("study_provider_contracts")
+          .update({ amount: valorTotal, details: details.trim() })
+          .eq("id", contractId);
       }
     }
 
@@ -1079,12 +1076,12 @@ export default function MeasurementExecution({ studyId }: Props) {
               </div>
               <div className="space-y-1.5">
                 <Label>{newProviderType === "PJ" ? "CNPJ" : "CPF"} *</Label>
-                <Input value={newProviderCpfCnpj} onChange={e => setNewProviderCpfCnpj(e.target.value)} maxLength={newProviderType === "PJ" ? 18 : 14} />
+                <Input value={newProviderCpfCnpj} onChange={e => setNewProviderCpfCnpj(formatCPFCNPJ(e.target.value, newProviderType))} maxLength={newProviderType === "PJ" ? 18 : 14} />
               </div>
             </div>
             <div className="space-y-1.5">
               <Label>Telefone</Label>
-              <Input value={newProviderPhone} onChange={e => setNewProviderPhone(e.target.value)} maxLength={14} />
+              <Input value={newProviderPhone} onChange={e => setNewProviderPhone(formatPhone(e.target.value))} maxLength={14} />
             </div>
           </div>
           <DialogFooter className="flex gap-2">
