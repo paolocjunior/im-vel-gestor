@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRNumber } from "@/components/ui/masked-number-input";
 import { Ruler, DollarSign, ShoppingCart, TrendingUp, BarChart3, Layers } from "lucide-react";
 import SCurveChart from "./SCurveChart";
 import SCurveExecutiveChart from "./SCurveExecutiveChart";
+import { syncAllPVMonthly } from "@/lib/pvSync";
 
 interface StageTreeNode {
   id: string;
@@ -37,8 +38,17 @@ export default function ConstructionDashboard({ studyId, stageTree, onNavigateSt
     m2Construido: 0,
     valorM2: 0,
   });
+  const [pvSynced, setPvSynced] = useState(false);
 
   const isDark = document.documentElement.classList.contains("dark");
+
+  // Sync PV monthly on dashboard load (idempotent)
+  const pvSyncRef = useRef(false);
+  useEffect(() => {
+    if (pvSyncRef.current) return;
+    pvSyncRef.current = true;
+    syncAllPVMonthly(studyId).then(() => setPvSynced(true));
+  }, [studyId]);
 
   const fetchKpis = useCallback(async () => {
     const { data: stages } = await supabase
@@ -115,10 +125,10 @@ export default function ConstructionDashboard({ studyId, stageTree, onNavigateSt
       </div>
 
       {/* Curva S Financeira — Operacional */}
-      <SCurveChart studyId={studyId} />
+      {pvSynced && <SCurveChart studyId={studyId} />}
 
       {/* Curva S Financeira — Executivo */}
-      <SCurveExecutiveChart studyId={studyId} />
+      {pvSynced && <SCurveExecutiveChart studyId={studyId} />}
     </div>
   );
 }
