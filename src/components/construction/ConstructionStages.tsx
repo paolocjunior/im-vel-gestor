@@ -513,9 +513,9 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
   };
 
   /** Recalculate and persist PV monthly values for a stage based on its period and total_value.
-   *  PV is distributed proportionally by calendar days across intersecting months.
+   *  All arithmetic is done in integer centavos to avoid IEEE 754 float errors.
    *  Guarantees: Σ PV_mês = total_value exactly AND no PV month is negative. */
-  const recalcPVMonthly = async (stageId: string) => {
+  const recalcPVMonthly = useCallback(async (stageId: string) => {
     const stage = (await supabase.from("construction_stages" as any)
       .select("start_date, end_date, total_value, stage_type")
       .eq("id", stageId)
@@ -525,12 +525,11 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
     let start = stage.start_date as string | null;
     let end = stage.end_date as string | null;
-    const total = Math.round((Number(stage.total_value) || 0) * 100) / 100;
+    const totalCents = Math.round((Number(stage.total_value) || 0) * 100);
 
     // For taxas, force end = start; skip if no start_date
     if (stage.stage_type === 'taxas') {
       if (!start) {
-        // No date → delete any existing PV and return
         await supabase.from("construction_stage_monthly_values" as any)
           .delete().eq("stage_id", stageId).eq("study_id", studyId).eq("value_type", "planned");
         return;
@@ -538,7 +537,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       end = start;
     }
 
-    if (!start || !end || total <= 0) {
+    if (!start || !end || totalCents <= 0) {
       await supabase.from("construction_stage_monthly_values" as any)
         .delete().eq("stage_id", stageId).eq("study_id", studyId).eq("value_type", "planned");
       return;
@@ -567,31 +566,28 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
     if (monthEntries.length === 0) return;
 
-    // Calculate PV per month with non-negativity guarantee
-    const pvValues: number[] = new Array(monthEntries.length);
-
-    // Round all months except last
-    let sumRounded = 0;
+    // All arithmetic in integer centavos
+    const pvCents: number[] = new Array(monthEntries.length);
+    let sumCents = 0;
     for (let i = 0; i < monthEntries.length - 1; i++) {
-      pvValues[i] = Math.round(((monthEntries[i].days / totalDays) * total) * 100) / 100;
-      sumRounded += pvValues[i];
+      pvCents[i] = Math.round((monthEntries[i].days / totalDays) * totalCents);
+      sumCents += pvCents[i];
     }
-    // Last month absorbs rounding difference
-    pvValues[monthEntries.length - 1] = Math.round((total - sumRounded) * 100) / 100;
+    // Last month absorbs residual
+    pvCents[monthEntries.length - 1] = totalCents - sumCents;
 
-    // Non-negativity fix: if last month went negative, pull cents from previous months
-    if (pvValues[pvValues.length - 1] < 0) {
-      for (let i = pvValues.length - 2; i >= 0 && pvValues[pvValues.length - 1] < 0; i--) {
-        while (pvValues[i] > 0 && pvValues[pvValues.length - 1] < 0) {
-          pvValues[i] = Math.round((pvValues[i] - 0.01) * 100) / 100;
-          pvValues[pvValues.length - 1] = Math.round((pvValues[pvValues.length - 1] + 0.01) * 100) / 100;
-        }
+    // Non-negativity fix in integer space (no float risk)
+    if (pvCents[pvCents.length - 1] < 0) {
+      for (let i = pvCents.length - 2; i >= 0 && pvCents[pvCents.length - 1] < 0; i--) {
+        const pull = Math.min(pvCents[i], -pvCents[pvCents.length - 1]);
+        pvCents[i] -= pull;
+        pvCents[pvCents.length - 1] += pull;
       }
     }
 
-    // Build insert rows (filter zeros)
+    // Build insert rows — convert back to decimal
     const inserts = monthEntries
-      .map((e, i) => ({ month_key: e.month_key, value: pvValues[i] }))
+      .map((e, i) => ({ month_key: e.month_key, value: pvCents[i] / 100 }))
       .filter(r => r.value > 0)
       .map(r => ({
         stage_id: stageId,
@@ -609,14 +605,13 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       await supabase.from("construction_stage_monthly_values" as any)
         .insert(inserts as any);
     }
-  };
+  }, [studyId]);
 
   // Stable ref for debounce timers — survives re-renders, cleaned up on unmount
   const pvRecalcTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     return () => {
-      // Cleanup all pending timers on unmount
       const timers = pvRecalcTimersRef.current;
       for (const key of Object.keys(timers)) {
         clearTimeout(timers[key]);
@@ -631,7 +626,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       recalcPVMonthly(stageId);
       delete timers[stageId];
     }, 600);
-  }, [studyId]);
+  }, [recalcPVMonthly]);
 
   const handleFieldChange = async (stageId: string, field: string, value: any) => {
     const update: any = { [field]: value };
