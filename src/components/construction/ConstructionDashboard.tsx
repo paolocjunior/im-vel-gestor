@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRNumber } from "@/components/ui/masked-number-input";
 import { Ruler, DollarSign, ShoppingCart, TrendingUp, BarChart3, Layers } from "lucide-react";
+import SCurveChart from "./SCurveChart";
 
 interface StageTreeNode {
   id: string;
@@ -111,6 +112,9 @@ export default function ConstructionDashboard({ studyId, stageTree, onNavigateSt
           </div>
         ))}
       </div>
+
+      {/* Curva S Financeira */}
+      <SCurveChart studyId={studyId} />
     </div>
   );
 }
