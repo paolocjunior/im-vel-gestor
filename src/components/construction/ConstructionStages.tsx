@@ -513,11 +513,14 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
   };
 
   /** Recalculate and persist PV monthly values for a stage based on its period and total_value.
-   *  PV is distributed proportionally by calendar days across intersecting months. */
+   *  PV is distributed proportionally by calendar days across intersecting months.
+   *  The last month absorbs rounding difference so Σ PV_mês = total_value exactly. */
   const recalcPVMonthly = async (stageId: string) => {
     const stage = (await supabase.from("construction_stages" as any)
       .select("start_date, end_date, total_value, stage_type")
-      .eq("id", stageId).single()).data as any;
+      .eq("id", stageId)
+      .eq("study_id", studyId)
+      .single()).data as any;
     if (!stage) return;
 
     // Delete existing PV rows for this stage
@@ -527,12 +530,17 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       .eq("study_id", studyId)
       .eq("value_type", "planned");
 
-    const start = stage.start_date as string | null;
-    const end = stage.end_date as string | null;
+    let start = stage.start_date as string | null;
+    let end = stage.end_date as string | null;
     const total = Number(stage.total_value) || 0;
+
+    // For taxas, force end = start
+    if (stage.stage_type === 'taxas' && start) {
+      end = start;
+    }
+
     if (!start || !end || total <= 0) return;
 
-    // For taxas, start === end, all PV goes to that month
     const startD = new Date(start + "T12:00:00");
     const endD = new Date(end + "T12:00:00");
     const totalDays = Math.round((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -546,29 +554,55 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       const m = cur.getMonth() + 1;
       const monthKey = `${y}-${String(m).padStart(2, "0")}`;
       const monthStart = new Date(y, m - 1, 1);
-      const monthEnd = new Date(y, m, 0); // last day of month
+      const monthEnd = new Date(y, m, 0);
       const effStart = startD > monthStart ? startD : monthStart;
       const effEnd = endD < monthEnd ? endD : monthEnd;
       const days = Math.round((effEnd.getTime() - effStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       if (days > 0) monthEntries.push({ month_key: monthKey, days });
-      // Move to first day of next month
       cur = new Date(y, m, 1);
     }
 
-    // Insert PV rows proportionally
-    for (const entry of monthEntries) {
-      const pvValue = (entry.days / totalDays) * total;
-      if (pvValue > 0) {
-        await supabase.from("construction_stage_monthly_values" as any)
-          .insert({
-            stage_id: stageId,
-            study_id: studyId,
-            month_key: entry.month_key,
-            value: Math.round(pvValue * 100) / 100,
-            value_type: "planned",
-          } as any);
+    if (monthEntries.length === 0) return;
+
+    // Calculate PV per month, rounding to 2 decimals
+    const pvRows: { month_key: string; value: number }[] = [];
+    let sumSoFar = 0;
+    for (let i = 0; i < monthEntries.length; i++) {
+      if (i === monthEntries.length - 1) {
+        // Last month absorbs rounding difference
+        pvRows.push({ month_key: monthEntries[i].month_key, value: Math.round((total - sumSoFar) * 100) / 100 });
+      } else {
+        const pvValue = Math.round(((monthEntries[i].days / totalDays) * total) * 100) / 100;
+        sumSoFar += pvValue;
+        pvRows.push({ month_key: monthEntries[i].month_key, value: pvValue });
       }
     }
+
+    // Batch insert all PV rows at once
+    const inserts = pvRows
+      .filter(r => r.value > 0)
+      .map(r => ({
+        stage_id: stageId,
+        study_id: studyId,
+        month_key: r.month_key,
+        value: r.value,
+        value_type: "planned",
+      }));
+
+    if (inserts.length > 0) {
+      await supabase.from("construction_stage_monthly_values" as any)
+        .insert(inserts as any);
+    }
+  };
+
+  // Debounced PV recalc to avoid excessive writes during typing
+  const pvRecalcTimers = useState<Record<string, ReturnType<typeof setTimeout>>>({})[0];
+  const debouncedRecalcPV = (stageId: string) => {
+    if (pvRecalcTimers[stageId]) clearTimeout(pvRecalcTimers[stageId]);
+    pvRecalcTimers[stageId] = setTimeout(() => {
+      recalcPVMonthly(stageId);
+      delete pvRecalcTimers[stageId];
+    }, 600);
   };
 
   const handleFieldChange = async (stageId: string, field: string, value: any) => {
@@ -599,9 +633,9 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     }
     await supabase.from("construction_stages" as any).update(update).eq("id", stageId);
 
-    // Recalculate PV when total_value or dates change
+    // Recalculate PV when total_value changes (debounced to avoid excessive writes during typing)
     if (field === "quantity" || field === "unit_price" || field === "total_value") {
-      await recalcPVMonthly(stageId);
+      debouncedRecalcPV(stageId);
     }
 
     // Sync taxas value/date changes to linked bill
