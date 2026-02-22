@@ -1,15 +1,19 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ChevronDown, ChevronRight, CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRNumber } from "@/components/ui/masked-number-input";
 import { toast } from "sonner";
+import { PAYMENT_METHODS, todayISO } from "@/lib/billConstants";
 
 interface StageRow {
   id: string;
@@ -106,6 +110,7 @@ const getStatusLabel = (status: string) => {
 
 export default function MeasurementExecution({ studyId }: Props) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [stages, setStages] = useState<StageRow[]>([]);
   const [units, setUnits] = useState<UnitItem[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -114,6 +119,14 @@ export default function MeasurementExecution({ studyId }: Props) {
   const [selectedStageIds, setSelectedStageIds] = useState<Set<string>>(new Set());
   const [filterApplied, setFilterApplied] = useState(false);
   const isDark = document.documentElement.classList.contains("dark");
+
+  // Payment dialog state
+  const [payStage, setPayStage] = useState<StageRow | null>(null);
+  const [payAccount, setPayAccount] = useState("");
+  const [payMethod, setPayMethod] = useState("");
+  const [payDate, setPayDate] = useState(todayISO());
+  const [banks, setBanks] = useState<{ id: string; name: string }[]>([]);
+  const [payingLoading, setPayingLoading] = useState(false);
 
   const fetchStages = useCallback(async () => {
     const { data } = await supabase
@@ -134,7 +147,14 @@ export default function MeasurementExecution({ studyId }: Props) {
     if (data) setUnits(data as any[]);
   }, []);
 
-  useEffect(() => { fetchStages(); fetchUnits(); }, [fetchStages, fetchUnits]);
+  const fetchBanks = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase.from("financial_institutions")
+      .select("id, name").eq("user_id", user.id).eq("is_active", true).order("name");
+    if (data) setBanks(data);
+  }, [user?.id]);
+
+  useEffect(() => { fetchStages(); fetchUnits(); fetchBanks(); }, [fetchStages, fetchUnits, fetchBanks]);
 
   useEffect(() => {
     const roots = stages.filter(s => !s.parent_id);
@@ -276,9 +296,28 @@ export default function MeasurementExecution({ studyId }: Props) {
         navigate(`/studies/${studyId}/bills/new?from=${encodeURIComponent(`/studies/${studyId}/construction`)}&stageId=${stage.id}&stageName=${encodeURIComponent(`Taxas - ${stage.code} - ${stage.name}`)}&amount=${stage.total_value}`);
         break;
       }
-      case "pagar":
-        toast.info("Funcionalidade de pagamento será implementada em breve");
+      case "pagar": {
+        // Check if bill exists for this stage
+        const { data: existingBill } = await supabase
+          .from("bills")
+          .select("id")
+          .eq("stage_id", stage.id)
+          .eq("is_deleted", false)
+          .maybeSingle();
+        if (!existingBill) {
+          toast.error("Cadastre a taxa no financeiro antes de pagar.");
+          return;
+        }
+        if (stage.status === "pago") {
+          toast.warning("Esta taxa já foi paga.");
+          return;
+        }
+        setPayStage(stage);
+        setPayAccount("");
+        setPayMethod("");
+        setPayDate(todayISO());
         break;
+      }
 
       // Serviço / Mão de Obra actions
       case "incluir_medicao":
@@ -291,6 +330,63 @@ export default function MeasurementExecution({ studyId }: Props) {
         toast.info("Estornar Medição será implementada em breve");
         break;
     }
+  };
+
+  // Execute payment for taxas stage
+  const executePayment = async () => {
+    if (!payStage) return;
+    if (!payAccount) { toast.error("Conta é obrigatória."); return; }
+    if (!payMethod) { toast.error("Forma de Pagamento é obrigatória."); return; }
+
+    setPayingLoading(true);
+
+    // Find linked bill and installment
+    const { data: bill } = await supabase
+      .from("bills")
+      .select("id")
+      .eq("stage_id", payStage.id)
+      .eq("is_deleted", false)
+      .maybeSingle();
+
+    if (!bill) {
+      toast.error("Despesa não encontrada. Cadastre a taxa primeiro.");
+      setPayingLoading(false);
+      return;
+    }
+
+    // Update installment to PAID
+    await supabase.from("bill_installments")
+      .update({
+        status: "PAID",
+        paid_at: payDate,
+        account_id: payAccount,
+        payment_method: payMethod,
+      })
+      .eq("bill_id", bill.id)
+      .eq("is_deleted", false)
+      .eq("status", "PENDING");
+
+    // Update bill header account/method
+    await supabase.from("bills")
+      .update({
+        account_id: payAccount,
+        payment_method: payMethod,
+      })
+      .eq("id", bill.id);
+
+    // Update stage status to pago
+    await supabase.from("construction_stages" as any)
+      .update({
+        status: "pago",
+        actual_start_date: payDate,
+        actual_end_date: payDate,
+      })
+      .eq("id", payStage.id);
+
+    setPayingLoading(false);
+    setPayStage(null);
+    toast.success("Pagamento registrado com sucesso!");
+    fetchStages();
   };
 
   function renderMeasurementColumn(stage: StageRow) {
@@ -564,6 +660,53 @@ export default function MeasurementExecution({ studyId }: Props) {
           )}
         </div>
       </div>
+
+      {/* Payment Dialog */}
+      <Dialog open={!!payStage} onOpenChange={(open) => { if (!open) setPayStage(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Pagar Taxa</DialogTitle>
+          </DialogHeader>
+          {payStage && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {payStage.code} - {payStage.name}
+              </p>
+              <p className="text-sm font-medium">
+                Valor: R$ {formatBRNumber(payStage.total_value)}
+              </p>
+              <div className="space-y-1.5">
+                <Label>Conta *</Label>
+                <Select value={payAccount} onValueChange={setPayAccount}>
+                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    {banks.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Forma de Pagamento *</Label>
+                <Select value={payMethod} onValueChange={setPayMethod}>
+                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Data do Pagamento</Label>
+                <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setPayStage(null)}>Cancelar</Button>
+            <Button onClick={executePayment} disabled={payingLoading}>
+              {payingLoading ? "Registrando..." : "Confirmar Pagamento"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

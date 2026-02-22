@@ -201,6 +201,9 @@ export default function BillFormPage() {
   // Stage ID for taxas linking
   const [stageId, setStageId] = useState<string | null>(null);
 
+  // Whether this bill is linked to a taxas stage (locks type/plan)
+  const isFromTaxasStage = !!stageId || !!searchParams.get("stageId");
+
   // Pre-fill from URL params (e.g. coming from Medição/Execução for Taxas)
   useEffect(() => {
     if (isNew && !isClone) {
@@ -209,7 +212,12 @@ export default function BillFormPage() {
       const prefillStageId = searchParams.get("stageId");
       if (prefillDesc) setDescription(decodeURIComponent(prefillDesc));
       if (prefillAmount) setTotalAmount(Number(prefillAmount) || 0);
-      if (prefillStageId) setStageId(prefillStageId);
+      if (prefillStageId) {
+        setStageId(prefillStageId);
+        // Auto-lock to non-recurring à vista for taxas
+        setBillType("compras");
+        setInstallmentPlan("AVISTA");
+      }
     }
   }, []);
 
@@ -323,6 +331,8 @@ export default function BillFormPage() {
     setInstallmentPlan(bill.installment_plan);
     if (bill.installment_plan === "RECORRENTE") setBillType("recorrente");
     else setBillType("compras");
+    // If linked to a stage, lock stageId
+    if ((bill as any).stage_id) setStageId((bill as any).stage_id);
     setFirstDueDate(bill.first_due_date || todayISO());
     setIntervalDays(bill.interval_days || 30);
     setNotes(bill.notes || "");
@@ -763,8 +773,16 @@ export default function BillFormPage() {
         status: "PENDING",
       });
       setSaving(false);
-      setAvistaConfirmOpen(true);
-      (window as any).__lastBillId = newBill.id;
+      // If from taxas stage, skip the "já pagou?" dialog
+      if (isFromTaxasStage) {
+        toast.success("Despesa criada!");
+        markSaved();
+        sessionStorage.removeItem(STORAGE_KEY);
+        navigate(billsListUrl);
+      } else {
+        setAvistaConfirmOpen(true);
+        (window as any).__lastBillId = newBill.id;
+      }
     } else {
       const inserts = installments.map((row, i) => ({
         bill_id: newBill.id,
@@ -883,7 +901,7 @@ export default function BillFormPage() {
                   setInstallmentPlan("AVISTA");
                   setInstallments([]); setShowInstallments(false);
                 }
-              }} disabled={isView}>
+              }} disabled={isView || isFromTaxasStage}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="compras">Não Recorrente</SelectItem>
@@ -924,7 +942,7 @@ export default function BillFormPage() {
               <>
                 <div className="space-y-1.5">
                   <Label>Parcelamento:</Label>
-                  <Select value={installmentPlan} onValueChange={handlePlanChange} disabled={isView || !billType}>
+                  <Select value={installmentPlan} onValueChange={handlePlanChange} disabled={isView || !billType || isFromTaxasStage}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {INSTALLMENT_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
