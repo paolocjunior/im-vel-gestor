@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -138,6 +138,7 @@ export default function MeasurementExecution({ studyId }: Props) {
   const [moSaving, setMoSaving] = useState(false);
   const [moRealizado, setMoRealizado] = useState(0);
   const [providers, setProviders] = useState<{ id: string; full_name: string }[]>([]);
+  const [actionKey, setActionKey] = useState(0); // forces Select re-render to reset to placeholder
 
   const fetchProviders = useCallback(async () => {
     const { data } = await supabase.from("study_providers")
@@ -184,6 +185,31 @@ export default function MeasurementExecution({ studyId }: Props) {
   }, [user?.id]);
 
   useEffect(() => { fetchStages(); fetchUnits(); fetchBanks(); fetchProviders(); }, [fetchStages, fetchUnits, fetchBanks, fetchProviders]);
+
+  // Restore MO modal state from sessionStorage (after returning from provider form)
+  useEffect(() => {
+    const saved = sessionStorage.getItem(`mo_modal_${studyId}`);
+    if (saved) {
+      sessionStorage.removeItem(`mo_modal_${studyId}`);
+      try {
+        const data = JSON.parse(saved);
+        // We need stages loaded first, so defer restoration
+        const tryRestore = () => {
+          if (stages.length === 0) return; // wait for stages
+          const stage = stages.find(s => s.id === data.stageId);
+          if (stage) {
+            setMoStage(stage);
+            setMoHours(data.hours || "");
+            setMoDate(data.date || todayISO());
+            setMoProviderId(data.providerId || "");
+            setMoNotes(data.notes || "");
+            fetchMoRealizado(stage.id);
+          }
+        };
+        tryRestore();
+      } catch { /* ignore */ }
+    }
+  }, [stages.length > 0]); // run when stages first load
 
   useEffect(() => {
     const roots = stages.filter(s => !s.parent_id);
@@ -295,6 +321,9 @@ export default function MeasurementExecution({ studyId }: Props) {
 
   // Handle measurement action selection
   const handleMeasurementAction = async (stage: StageRow, action: string) => {
+    // Increment key to force Select re-render (reset to placeholder)
+    setActionKey(k => k + 1);
+
     switch (action) {
       // Material actions
       case "orcamento":
@@ -309,7 +338,6 @@ export default function MeasurementExecution({ studyId }: Props) {
 
       // Taxas actions
       case "cadastrar": {
-        // Check if bill already exists for this stage
         const { data: existingBills } = await supabase
           .from("bills")
           .select("id")
@@ -321,12 +349,10 @@ export default function MeasurementExecution({ studyId }: Props) {
           toast.warning("Esta taxa já foi cadastrada no financeiro.");
           return;
         }
-        // Navigate to new bill page with pre-filled data
         navigate(`/studies/${studyId}/bills/new?from=${encodeURIComponent(`/studies/${studyId}/construction`)}&stageId=${stage.id}&stageName=${encodeURIComponent(`Taxas - ${stage.code} - ${stage.name}`)}&amount=${stage.total_value}`);
         break;
       }
       case "pagar": {
-        // Check if bill exists for this stage
         const { data: existingBill } = await supabase
           .from("bills")
           .select("id")
@@ -613,7 +639,7 @@ export default function MeasurementExecution({ studyId }: Props) {
 
     if (stage.stage_type === 'material') {
       return (
-        <Select onValueChange={(v) => handleMeasurementAction(stage, v)}>
+        <Select key={`${stage.id}-mat-${actionKey}`} onValueChange={(v) => handleMeasurementAction(stage, v)}>
           <SelectTrigger className="w-[150px] h-8 text-xs">
             <SelectValue placeholder="Ação..." />
           </SelectTrigger>
@@ -628,7 +654,7 @@ export default function MeasurementExecution({ studyId }: Props) {
 
     if (stage.stage_type === 'taxas') {
       return (
-        <Select onValueChange={(v) => handleMeasurementAction(stage, v)}>
+        <Select key={`${stage.id}-tax-${actionKey}`} onValueChange={(v) => handleMeasurementAction(stage, v)}>
           <SelectTrigger className="w-[150px] h-8 text-xs">
             <SelectValue placeholder="Ação..." />
           </SelectTrigger>
@@ -642,7 +668,7 @@ export default function MeasurementExecution({ studyId }: Props) {
 
     // servico or mao_de_obra
     return (
-      <Select onValueChange={(v) => handleMeasurementAction(stage, v)}>
+      <Select key={`${stage.id}-mo-${actionKey}`} onValueChange={(v) => handleMeasurementAction(stage, v)}>
         <SelectTrigger className="w-[150px] h-8 text-xs">
           <SelectValue placeholder="Ação..." />
         </SelectTrigger>
@@ -991,7 +1017,19 @@ export default function MeasurementExecution({ studyId }: Props) {
                       variant="outline"
                       size="icon"
                       className="shrink-0"
-                      onClick={() => navigate(`/studies/${studyId}/providers/new?from=${encodeURIComponent(`/studies/${studyId}/construction`)}`)}
+                      onClick={() => {
+                        // Save current modal state to sessionStorage before navigating
+                        if (moStage) {
+                          sessionStorage.setItem(`mo_modal_${studyId}`, JSON.stringify({
+                            stageId: moStage.id,
+                            hours: moHours,
+                            date: moDate,
+                            providerId: moProviderId,
+                            notes: moNotes,
+                          }));
+                        }
+                        navigate(`/studies/${studyId}/providers/new?from=${encodeURIComponent(`/studies/${studyId}/construction`)}`);
+                      }}
                       title="Adicionar prestador"
                     >
                       <Plus className="h-4 w-4" />
