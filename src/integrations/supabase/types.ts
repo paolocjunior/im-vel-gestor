@@ -176,6 +176,80 @@ export type Database = {
           },
         ]
       }
+      construction_measurements: {
+        Row: {
+          contract_id: string | null
+          created_at: string
+          id: string
+          is_deleted: boolean
+          measurement_date: string
+          measurement_type: string
+          notes: string | null
+          provider_id: string | null
+          quantity: number
+          stage_id: string
+          study_id: string
+          updated_at: string
+        }
+        Insert: {
+          contract_id?: string | null
+          created_at?: string
+          id?: string
+          is_deleted?: boolean
+          measurement_date: string
+          measurement_type?: string
+          notes?: string | null
+          provider_id?: string | null
+          quantity?: number
+          stage_id: string
+          study_id: string
+          updated_at?: string
+        }
+        Update: {
+          contract_id?: string | null
+          created_at?: string
+          id?: string
+          is_deleted?: boolean
+          measurement_date?: string
+          measurement_type?: string
+          notes?: string | null
+          provider_id?: string | null
+          quantity?: number
+          stage_id?: string
+          study_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "construction_measurements_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "study_provider_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "construction_measurements_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "study_providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "construction_measurements_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "construction_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "construction_measurements_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       construction_stage_catalog: {
         Row: {
           code: string
