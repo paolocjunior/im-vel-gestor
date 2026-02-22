@@ -187,29 +187,27 @@ export default function MeasurementExecution({ studyId }: Props) {
   useEffect(() => { fetchStages(); fetchUnits(); fetchBanks(); fetchProviders(); }, [fetchStages, fetchUnits, fetchBanks, fetchProviders]);
 
   // Restore MO modal state from sessionStorage (after returning from provider form)
+  const restoredRef = useRef(false);
   useEffect(() => {
+    if (stages.length === 0 || restoredRef.current) return;
     const saved = sessionStorage.getItem(`mo_modal_${studyId}`);
-    if (saved) {
-      sessionStorage.removeItem(`mo_modal_${studyId}`);
-      try {
-        const data = JSON.parse(saved);
-        // We need stages loaded first, so defer restoration
-        const tryRestore = () => {
-          if (stages.length === 0) return; // wait for stages
-          const stage = stages.find(s => s.id === data.stageId);
-          if (stage) {
-            setMoStage(stage);
-            setMoHours(data.hours || "");
-            setMoDate(data.date || todayISO());
-            setMoProviderId(data.providerId || "");
-            setMoNotes(data.notes || "");
-            fetchMoRealizado(stage.id);
-          }
-        };
-        tryRestore();
-      } catch { /* ignore */ }
-    }
-  }, [stages.length > 0]); // run when stages first load
+    if (!saved) { restoredRef.current = true; return; }
+    restoredRef.current = true;
+    sessionStorage.removeItem(`mo_modal_${studyId}`);
+    try {
+      const data = JSON.parse(saved);
+      const stage = stages.find(s => s.id === data.stageId);
+      if (stage) {
+        setMoStage(stage);
+        setMoHours(data.hours || "");
+        setMoDate(data.date || todayISO());
+        setMoProviderId(data.providerId || "");
+        setMoNotes(data.notes || "");
+        fetchMoRealizado(stage.id);
+        fetchProviders();
+      }
+    } catch { /* ignore */ }
+  }, [stages]);
 
   useEffect(() => {
     const roots = stages.filter(s => !s.parent_id);

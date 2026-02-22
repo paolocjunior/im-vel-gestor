@@ -355,7 +355,8 @@ export default function ProviderFormPage() {
     loadPayments();
   };
 
-  const goBack = () => guardedNavigate(`/studies/${studyId}/providers`);
+  const fromParam = searchParams.get("from");
+  const goBack = () => guardedNavigate(fromParam || `/studies/${studyId}/providers`);
   const tabsDisabled = !savedProviderId;
 
   return (
