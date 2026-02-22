@@ -1,0 +1,2 @@
+ALTER TABLE public.construction_stage_monthly_values
+DROP CONSTRAINT construction_stage_monthly_values_stage_id_month_key_key;
