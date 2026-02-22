@@ -294,6 +294,23 @@ export default function BillsPage() {
         actual_start_date: paymentDate,
         actual_end_date: paymentDate,
       }).eq("id", inst.bill_stage_id);
+
+      // Insert monthly value for the payment month in physical-financial schedule
+      const paidDate = new Date(paymentDate + "T12:00:00");
+      const monthKey = `${paidDate.getFullYear()}-${String(paidDate.getMonth() + 1).padStart(2, "0")}`;
+      // Remove any existing monthly value for this stage first
+      await supabase.from("construction_stage_monthly_values" as any)
+        .delete()
+        .eq("stage_id", inst.bill_stage_id)
+        .eq("study_id", studyId);
+      // Insert the paid value in the correct month
+      await supabase.from("construction_stage_monthly_values" as any)
+        .insert({
+          stage_id: inst.bill_stage_id,
+          study_id: studyId,
+          month_key: monthKey,
+          value: inst.amount,
+        } as any);
     }
     setPaymentInstId(null);
     setPaymentConfirm({ ...inst, paid_at: paymentDate, status: "PAID" });
@@ -323,6 +340,11 @@ export default function BillsPage() {
         actual_start_date: null,
         actual_end_date: null,
       }).eq("id", inst.bill_stage_id);
+      // Remove monthly value from physical-financial schedule
+      await supabase.from("construction_stage_monthly_values" as any)
+        .delete()
+        .eq("stage_id", inst.bill_stage_id)
+        .eq("study_id", studyId);
     }
     toast.success("Vencimento reaberto.");
     loadData();

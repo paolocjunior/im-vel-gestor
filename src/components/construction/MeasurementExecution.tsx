@@ -383,6 +383,23 @@ export default function MeasurementExecution({ studyId }: Props) {
       })
       .eq("id", payStage.id);
 
+    // Insert monthly value for the payment month in physical-financial schedule
+    const paidDate = new Date(payDate + "T12:00:00");
+    const monthKey = `${paidDate.getFullYear()}-${String(paidDate.getMonth() + 1).padStart(2, "0")}`;
+    // Remove any existing monthly value for this stage first
+    await supabase.from("construction_stage_monthly_values" as any)
+      .delete()
+      .eq("stage_id", payStage.id)
+      .eq("study_id", studyId);
+    // Insert the paid value in the correct month
+    await supabase.from("construction_stage_monthly_values" as any)
+      .insert({
+        stage_id: payStage.id,
+        study_id: studyId,
+        month_key: monthKey,
+        value: payStage.total_value,
+      } as any);
+
     setPayingLoading(false);
     setPayStage(null);
     toast.success("Pagamento registrado com sucesso!");

@@ -34,6 +34,7 @@ export interface StageRow {
   actual_end_date: string | null;
   status: string;
   total_value: number;
+  stage_type: string | null;
 }
 
 export interface MonthColumn {
