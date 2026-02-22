@@ -435,9 +435,34 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       return children.flatMap(c => [c.id, ...collectDescendants(c.id)]);
     };
     const allIds = [deleteTarget.id, ...collectDescendants(deleteTarget.id)];
+
+    // Cascade: soft-delete linked bills for unpaid taxas stages
+    const taxasIds = allIds.filter(id => {
+      const s = stages.find(st => st.id === id);
+      return s && s.stage_type === 'taxas' && s.status !== 'pago';
+    });
+    let deletedBillCount = 0;
+    if (taxasIds.length > 0) {
+      const { data: linkedBills } = await supabase
+        .from("bills")
+        .select("id")
+        .in("stage_id", taxasIds)
+        .eq("is_deleted", false);
+      if (linkedBills && linkedBills.length > 0) {
+        const billIds = linkedBills.map(b => b.id);
+        await supabase.from("bill_installments").update({ is_deleted: true }).in("bill_id", billIds);
+        await supabase.from("bills").update({ is_deleted: true }).in("id", billIds);
+        deletedBillCount = billIds.length;
+      }
+    }
+
     await supabase.from("construction_stages" as any).update({ is_deleted: true }).in("id", allIds);
 
-    toast.success("Etapa excluída");
+    if (deletedBillCount > 0) {
+      toast.success(`Etapa excluída. ${deletedBillCount} despesa(s) vinculada(s) também ${deletedBillCount === 1 ? 'foi excluída' : 'foram excluídas'} do financeiro.`);
+    } else {
+      toast.success("Etapa excluída");
+    }
     const parentId = deleteTarget.parent_id;
     setDeleteTarget(null);
 
