@@ -5,11 +5,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ChevronDown, ChevronRight, CalendarIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, CalendarIcon, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRNumber } from "@/components/ui/masked-number-input";
 import { toast } from "sonner";
@@ -128,6 +129,34 @@ export default function MeasurementExecution({ studyId }: Props) {
   const [banks, setBanks] = useState<{ id: string; name: string }[]>([]);
   const [payingLoading, setPayingLoading] = useState(false);
 
+  // Mão de Obra measurement dialog state
+  const [moStage, setMoStage] = useState<StageRow | null>(null);
+  const [moHours, setMoHours] = useState("");
+  const [moDate, setMoDate] = useState(todayISO());
+  const [moProviderId, setMoProviderId] = useState("");
+  const [moNotes, setMoNotes] = useState("");
+  const [moSaving, setMoSaving] = useState(false);
+  const [moRealizado, setMoRealizado] = useState(0);
+  const [providers, setProviders] = useState<{ id: string; full_name: string }[]>([]);
+
+  const fetchProviders = useCallback(async () => {
+    const { data } = await supabase.from("study_providers")
+      .select("id, full_name")
+      .eq("study_id", studyId)
+      .eq("is_deleted", false)
+      .order("full_name");
+    if (data) setProviders(data);
+  }, [studyId]);
+
+  const fetchMoRealizado = useCallback(async (stageId: string) => {
+    const { data } = await supabase.from("construction_measurements" as any)
+      .select("quantity")
+      .eq("stage_id", stageId)
+      .eq("is_deleted", false);
+    const total = (data || []).reduce((sum: number, m: any) => sum + Number(m.quantity), 0);
+    setMoRealizado(total);
+  }, []);
+
   const fetchStages = useCallback(async () => {
     const { data } = await supabase
       .from("construction_stages" as any)
@@ -154,7 +183,7 @@ export default function MeasurementExecution({ studyId }: Props) {
     if (data) setBanks(data);
   }, [user?.id]);
 
-  useEffect(() => { fetchStages(); fetchUnits(); fetchBanks(); }, [fetchStages, fetchUnits, fetchBanks]);
+  useEffect(() => { fetchStages(); fetchUnits(); fetchBanks(); fetchProviders(); }, [fetchStages, fetchUnits, fetchBanks, fetchProviders]);
 
   useEffect(() => {
     const roots = stages.filter(s => !s.parent_id);
@@ -320,9 +349,19 @@ export default function MeasurementExecution({ studyId }: Props) {
       }
 
       // Serviço / Mão de Obra actions
-      case "incluir_medicao":
-        toast.info("Incluir Medição será implementada em breve");
+      case "incluir_medicao": {
+        if (stage.stage_type === 'mao_de_obra') {
+          setMoStage(stage);
+          setMoHours("");
+          setMoDate(todayISO());
+          setMoProviderId("");
+          setMoNotes("");
+          await fetchMoRealizado(stage.id);
+        } else {
+          toast.info("Incluir Medição para Serviço será implementada em breve");
+        }
         break;
+      }
       case "retificar_medicao":
         toast.info("Retificar Medição será implementada em breve");
         break;
@@ -403,6 +442,166 @@ export default function MeasurementExecution({ studyId }: Props) {
     setPayingLoading(false);
     setPayStage(null);
     toast.success("Pagamento registrado com sucesso!");
+     fetchStages();
+  };
+
+  // Save Mão de Obra measurement
+  const saveMoMeasurement = async () => {
+    if (!moStage) return;
+    const qty = parseFloat(moHours.replace(",", "."));
+    if (!qty || qty <= 0) { toast.error("Informe as horas apontadas."); return; }
+    if (!moDate) { toast.error("Informe a data."); return; }
+
+    setMoSaving(true);
+
+    const unit = units.find(u => u.id === moStage.unit_id);
+    const unitAbbrev = unit?.abbreviation || "h";
+
+    let contractId: string | null = null;
+
+    // If provider selected, find or create contract
+    const hasProvider = moProviderId && moProviderId !== "__none__";
+    if (hasProvider) {
+      // Check if contract for this stage already exists for this provider
+      const { data: existingContracts } = await supabase.from("study_provider_contracts")
+        .select("id")
+        .eq("provider_id", moProviderId)
+        .eq("study_id", studyId)
+        .eq("service", moStage.name)
+        .eq("is_deleted", false);
+
+      if (existingContracts && existingContracts.length > 0) {
+        contractId = existingContracts[0].id;
+      } else {
+        // Create new contract
+        const { data: newContract } = await supabase.from("study_provider_contracts")
+          .insert({
+            provider_id: moProviderId,
+            study_id: studyId,
+            service: moStage.name,
+            amount: moStage.total_value || 0,
+            billing_model: "FIXED",
+            start_date: moStage.start_date || todayISO(),
+            end_date: moStage.end_date || null,
+            status: "ACTIVE",
+            details: `Total de ${unitAbbrev} planejadas: ${formatBRNumber(moStage.quantity, unit?.has_decimals ? 2 : 0)}${unitAbbrev}`,
+          })
+          .select("id")
+          .single();
+        if (newContract) contractId = newContract.id;
+      }
+    }
+
+    // Insert measurement record
+    await supabase.from("construction_measurements" as any)
+      .insert({
+        study_id: studyId,
+        stage_id: moStage.id,
+        measurement_date: moDate,
+        quantity: qty,
+        provider_id: hasProvider ? moProviderId : null,
+        contract_id: contractId,
+        notes: moNotes.trim() || null,
+        measurement_type: "inclusion",
+      } as any);
+
+    // Update contract details with measurement log
+    if (contractId) {
+      // Fetch all measurements for this stage to rebuild details
+      const { data: allMeasurements } = await supabase.from("construction_measurements" as any)
+        .select("measurement_date, quantity, measurement_type")
+        .eq("stage_id", moStage.id)
+        .eq("contract_id", contractId)
+        .eq("is_deleted", false)
+        .order("measurement_date");
+
+      if (allMeasurements) {
+        const totalApontado = (allMeasurements as any[]).reduce((sum: number, m: any) => {
+          return sum + (m.measurement_type === 'reversal' ? -Number(m.quantity) : Number(m.quantity));
+        }, 0);
+
+        let details = `Total de ${unitAbbrev} planejadas: ${formatBRNumber(moStage.quantity, unit?.has_decimals ? 2 : 0)}${unitAbbrev}\n\n`;
+        for (const m of allMeasurements as any[]) {
+          const [y, mo, d] = m.measurement_date.split("-");
+          const prefix = m.measurement_type === 'reversal' ? '(ESTORNO) ' : m.measurement_type === 'rectification' ? '(RETIFICAÇÃO) ' : '';
+          details += `${prefix}${d}/${mo}/${y} - ${formatBRNumber(Number(m.quantity), unit?.has_decimals ? 2 : 0)}${unitAbbrev} apontadas\n`;
+        }
+
+        // Check if stage is finished (total >= planned)
+        const isFinished = totalApontado >= moStage.quantity;
+        if (isFinished) {
+          details += `\nTotal de ${unitAbbrev} apontadas: ${formatBRNumber(totalApontado, unit?.has_decimals ? 2 : 0)}${unitAbbrev}\n`;
+          const valorTotal = totalApontado * moStage.unit_price;
+          details += `Valor total (R$ ${formatBRNumber(moStage.unit_price)}/${unitAbbrev}) = R$ ${formatBRNumber(valorTotal)}`;
+
+          // Update contract amount with actual total
+          await supabase.from("study_provider_contracts")
+            .update({ amount: valorTotal, details: details.trim() })
+            .eq("id", contractId);
+        } else {
+          await supabase.from("study_provider_contracts")
+            .update({ details: details.trim() })
+            .eq("id", contractId);
+        }
+      }
+    }
+
+    // Update stage status based on progress
+    const newRealizado = moRealizado + qty;
+    if (newRealizado >= moStage.quantity) {
+      // Finished
+      await supabase.from("construction_stages" as any)
+        .update({ status: "finished", actual_end_date: moDate })
+        .eq("id", moStage.id);
+
+      // If had no actual_start_date, set it
+      if (!moStage.start_date) {
+        await supabase.from("construction_stages" as any)
+          .update({ actual_start_date: moDate })
+          .eq("id", moStage.id);
+      }
+    } else if (newRealizado > 0) {
+      // In progress
+      const updatePayload: any = { status: "in_progress" };
+      // Set actual_start_date on first measurement
+      if (moRealizado === 0) {
+        updatePayload.actual_start_date = moDate;
+      }
+      await supabase.from("construction_stages" as any)
+        .update(updatePayload)
+        .eq("id", moStage.id);
+    }
+
+    // Insert monthly value for the physical-financial schedule
+    const mDate = new Date(moDate + "T12:00:00");
+    const monthKey = `${mDate.getFullYear()}-${String(mDate.getMonth() + 1).padStart(2, "0")}`;
+    const valueForMonth = qty * moStage.unit_price;
+
+    // Check if there's already a value for this month
+    const { data: existingMonthly } = await supabase.from("construction_stage_monthly_values" as any)
+      .select("id, value")
+      .eq("stage_id", moStage.id)
+      .eq("study_id", studyId)
+      .eq("month_key", monthKey)
+      .maybeSingle();
+
+    if (existingMonthly) {
+      await supabase.from("construction_stage_monthly_values" as any)
+        .update({ value: Number((existingMonthly as any).value) + valueForMonth })
+        .eq("id", (existingMonthly as any).id);
+    } else {
+      await supabase.from("construction_stage_monthly_values" as any)
+        .insert({
+          stage_id: moStage.id,
+          study_id: studyId,
+          month_key: monthKey,
+          value: valueForMonth,
+        } as any);
+    }
+
+    setMoSaving(false);
+    setMoStage(null);
+    toast.success("Apontamento registrado com sucesso!");
     fetchStages();
   };
 
@@ -720,6 +919,102 @@ export default function MeasurementExecution({ studyId }: Props) {
             <Button variant="outline" onClick={() => setPayStage(null)}>Cancelar</Button>
             <Button onClick={executePayment} disabled={payingLoading}>
               {payingLoading ? "Registrando..." : "Confirmar Pagamento"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mão de Obra Measurement Dialog */}
+      <Dialog open={!!moStage} onOpenChange={(open) => { if (!open) setMoStage(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mão de Obra - {moStage?.code} {moStage?.name}</DialogTitle>
+          </DialogHeader>
+          {moStage && (() => {
+            const unit = units.find(u => u.id === moStage.unit_id);
+            const unitAbbrev = unit?.abbreviation || "h";
+            const planejado = moStage.quantity;
+            const saldo = planejado - moRealizado;
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div className="rounded-lg bg-muted p-3 text-center">
+                    <p className="text-muted-foreground text-xs">Planejado</p>
+                    <p className="font-semibold">{formatBRNumber(planejado, unit?.has_decimals ? 2 : 0)} {unitAbbrev}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted p-3 text-center">
+                    <p className="text-muted-foreground text-xs">Realizado</p>
+                    <p className="font-semibold">{formatBRNumber(moRealizado, unit?.has_decimals ? 2 : 0)} {unitAbbrev}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted p-3 text-center">
+                    <p className="text-muted-foreground text-xs">Saldo</p>
+                    <p className={cn("font-semibold", saldo < 0 && "text-destructive")}>{formatBRNumber(saldo, unit?.has_decimals ? 2 : 0)} {unitAbbrev}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>{unit?.name || "Horas"} apontadas agora *</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={moHours}
+                      onChange={e => setMoHours(e.target.value)}
+                      placeholder="0"
+                      className="flex-1"
+                    />
+                    <span className="text-sm text-muted-foreground">{unitAbbrev}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Data *</Label>
+                  <Input type="date" value={moDate} onChange={e => setMoDate(e.target.value)} />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Equipe/Responsável</Label>
+                  <div className="flex items-center gap-2">
+                    <Select value={moProviderId} onValueChange={setMoProviderId}>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Selecione (opcional)..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Nenhum</SelectItem>
+                        {providers.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="shrink-0"
+                      onClick={() => navigate(`/studies/${studyId}/providers/new?from=${encodeURIComponent(`/studies/${studyId}/construction`)}`)}
+                      title="Adicionar prestador"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Observação</Label>
+                  <Textarea
+                    value={moNotes}
+                    onChange={e => setMoNotes(e.target.value)}
+                    placeholder="Observação opcional..."
+                    rows={2}
+                  />
+                </div>
+              </div>
+            );
+          })()}
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setMoStage(null)}>Cancelar</Button>
+            <Button onClick={saveMoMeasurement} disabled={moSaving}>
+              {moSaving ? "Salvando..." : "Salvar Apontamento"}
             </Button>
           </DialogFooter>
         </DialogContent>
