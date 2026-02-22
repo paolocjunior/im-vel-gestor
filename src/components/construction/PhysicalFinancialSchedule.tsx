@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import { ChevronDown, ChevronRight, CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBRNumber, parseBRNumber } from "@/components/ui/masked-number-input";
+import { formatBRNumber } from "@/components/ui/masked-number-input";
 import { ptBR } from "date-fns/locale";
 import {
   StageRow, generateMonthColumns, groupColumns,
@@ -18,16 +18,6 @@ interface Props {
   studyId: string;
 }
 
-/**
- * Formats digits-only input as Brazilian currency while typing.
- * E.g. "1" -> "0,01", "12" -> "0,12", "123" -> "1,23", "1234" -> "12,34"
- */
-function formatDigitsAsBR(digits: string): string {
-  if (!digits) return "";
-  const num = parseInt(digits, 10) / 100;
-  return num.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 export default function PhysicalFinancialSchedule({ studyId }: Props) {
   const [stages, setStages] = useState<StageRow[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -35,9 +25,9 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
   const [periodEnd, setPeriodEnd] = useState("");
   const [selectedStageIds, setSelectedStageIds] = useState<Set<string>>(new Set());
   const [filterApplied, setFilterApplied] = useState(false);
-  const [monthlyValues, setMonthlyValues] = useState<Map<string, Map<string, number>>>(new Map());
-  const [editingCell, setEditingCell] = useState<{ stageId: string; colKey: string } | null>(null);
-  const [editValue, setEditValue] = useState("");
+  // PV and AC maps: stageId -> monthKey -> value
+  const [pvValues, setPvValues] = useState<Map<string, Map<string, number>>>(new Map());
+  const [acValues, setAcValues] = useState<Map<string, Map<string, number>>>(new Map());
 
   const fetchStages = useCallback(async () => {
     const { data } = await supabase
@@ -52,15 +42,18 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
   const fetchMonthlyValues = useCallback(async () => {
     const { data } = await supabase
       .from("construction_stage_monthly_values" as any)
-      .select("stage_id, month_key, value")
+      .select("stage_id, month_key, value, value_type")
       .eq("study_id", studyId);
     if (data) {
-      const map = new Map<string, Map<string, number>>();
+      const pv = new Map<string, Map<string, number>>();
+      const ac = new Map<string, Map<string, number>>();
       for (const row of data as any[]) {
-        if (!map.has(row.stage_id)) map.set(row.stage_id, new Map());
-        map.get(row.stage_id)!.set(row.month_key, Number(row.value) || 0);
+        const target = row.value_type === "planned" ? pv : ac;
+        if (!target.has(row.stage_id)) target.set(row.stage_id, new Map());
+        target.get(row.stage_id)!.set(row.month_key, Number(row.value) || 0);
       }
-      setMonthlyValues(map);
+      setPvValues(pv);
+      setAcValues(ac);
     }
   }, [studyId]);
 
@@ -121,29 +114,31 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
     return sum + (hasChildren ? 0 : Number(s.total_value) || 0);
   }, 0);
 
-  const getStageGroupValue = (stageId: string, monthKeys: string[]): number => {
-    const stageMap = monthlyValues.get(stageId);
+  // Helper to get value from a map for a stage and month keys
+  const getMapValue = (map: Map<string, Map<string, number>>, stageId: string, monthKeys: string[]): number => {
+    const stageMap = map.get(stageId);
     if (!stageMap) return 0;
     return monthKeys.reduce((sum, mk) => sum + (stageMap.get(mk) || 0), 0);
   };
 
-  const getAggregatedGroupValue = useCallback((stageId: string, monthKeys: string[]): number => {
+  // Aggregated (recursive) value for parent stages
+  const getAggregatedValue = useCallback((map: Map<string, Map<string, number>>, stageId: string, monthKeys: string[]): number => {
     const children = stages.filter(s => s.parent_id === stageId);
-    if (children.length === 0) return getStageGroupValue(stageId, monthKeys);
-    return children.reduce((sum, c) => sum + getAggregatedGroupValue(c.id, monthKeys), 0);
-  }, [stages, monthlyValues]);
+    if (children.length === 0) return getMapValue(map, stageId, monthKeys);
+    return children.reduce((sum, c) => sum + getAggregatedValue(map, c.id, monthKeys), 0);
+  }, [stages]);
 
-  const getRealizado = useCallback((stageId: string): number => {
+  const getTotalForStage = useCallback((map: Map<string, Map<string, number>>, stageId: string): number => {
     const children = stages.filter(s => s.parent_id === stageId);
     if (children.length === 0) {
-      const stageMap = monthlyValues.get(stageId);
+      const stageMap = map.get(stageId);
       if (!stageMap) return 0;
       let sum = 0;
       stageMap.forEach(v => sum += v);
       return sum;
     }
-    return children.reduce((sum, c) => sum + getRealizado(c.id), 0);
-  }, [stages, monthlyValues]);
+    return children.reduce((sum, c) => sum + getTotalForStage(map, c.id), 0);
+  }, [stages]);
 
   const getComputedActualDates = useCallback((stageId: string): { start: string | null; end: string | null } => {
     const children = stages.filter(s => s.parent_id === stageId);
@@ -185,66 +180,10 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
     setFilterApplied(false);
   };
 
-  const saveMonthlyValue = async (stageId: string, monthKey: string, value: number) => {
-    const baseMonthKey = monthKey.replace(/-Q[12]$/, "");
-    const { data: existing } = await supabase
-      .from("construction_stage_monthly_values" as any)
-      .select("id")
-      .eq("stage_id", stageId)
-      .eq("month_key", baseMonthKey)
-      .maybeSingle();
-
-    if (existing) {
-      await supabase
-        .from("construction_stage_monthly_values" as any)
-        .update({ value, updated_at: new Date().toISOString() } as any)
-        .eq("id", (existing as any).id);
-    } else if (value > 0) {
-      await supabase
-        .from("construction_stage_monthly_values" as any)
-        .insert({ stage_id: stageId, study_id: studyId, month_key: baseMonthKey, value } as any);
-    }
-    fetchMonthlyValues();
-  };
-
-  const saveActualDate = async (stageId: string, field: "actual_start_date" | "actual_end_date", date: Date | undefined) => {
-    const value = date ? date.toISOString().slice(0, 10) : null;
-    await supabase
-      .from("construction_stages" as any)
-      .update({ [field]: value } as any)
-      .eq("id", stageId);
-    fetchStages();
-  };
-
-  // Editing disabled - fields are now read-only
-  const handleCellClick = (_stageId: string, _colKey: string, _monthKeys: string[]) => {
-    // No-op: editing disabled
-  };
-
-  const handleEditChange = (raw: string) => {
-    const digits = raw.replace(/\D/g, "");
-    if (!digits) {
-      setEditValue("");
-      return;
-    }
-    setEditValue(formatDigitsAsBR(digits));
-  };
-
-  const commitEdit = () => {
-    if (!editingCell) return;
-    const numVal = parseBRNumber(editValue);
-    const group = groupedColumns.find(g => g.key === editingCell.colKey);
-    if (group && group.monthKeys.length > 0) {
-      saveMonthlyValue(editingCell.stageId, group.monthKeys[0], numVal);
-    }
-    setEditingCell(null);
-    setEditValue("");
-  };
-
   const fmt = (v: number) => formatBRNumber(v);
   const fmtPercent = (v: number) => `${formatBRNumber(v)}%`;
 
-  const COL_WIDTH_MONTH = 120;
+  const COL_WIDTH_MONTH = 140;
 
   const getFontSize = (level: number) => {
     if (level === 0) return "text-sm";
@@ -252,11 +191,15 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
     return "text-[11px]";
   };
 
-  const getFooterGroupTotal = (monthKeys: string[]): number => {
+  // Footer totals for leaf stages only
+  const getFooterTotal = (map: Map<string, Map<string, number>>, monthKeys: string[]): number => {
     return stages
       .filter(s => !stages.some(c => c.parent_id === s.id))
-      .reduce((sum, s) => sum + getStageGroupValue(s.id, monthKeys), 0);
+      .reduce((sum, s) => sum + getMapValue(map, s.id, monthKeys), 0);
   };
+
+  const totalPV = stages.filter(s => !stages.some(c => c.parent_id === s.id)).reduce((sum, s) => sum + getTotalForStage(pvValues, s.id), 0);
+  const totalAC = stages.filter(s => !stages.some(c => c.parent_id === s.id)).reduce((sum, s) => sum + getTotalForStage(acValues, s.id), 0);
 
   return (
     <div className="space-y-3">
@@ -271,9 +214,15 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
               {allEffectiveDates.length > 0 ? `${formatDateBR(globalMin)} — ${formatDateBR(globalMax)}` : "Sem datas definidas"}
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground mb-0.5">Valor Total</p>
-            <p className="text-base font-semibold text-foreground">R$ {fmt(grandTotal)}</p>
+          <div className="flex items-center gap-6">
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground mb-0.5">PV Total</p>
+              <p className="text-base font-semibold text-foreground">R$ {fmt(grandTotal)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground mb-0.5">AC Total</p>
+              <p className="text-base font-semibold text-foreground">R$ {fmt(totalAC)}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -306,18 +255,24 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
         </div>
       </div>
 
+      {/* Tooltip legend */}
+      <div className="flex items-center gap-4 text-[10px] text-muted-foreground px-1">
+        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-blue-400" /> PV = Planejado (dias corridos)</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-500" /> AC = Realizado</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-orange-400" /> Desvio = AC − PV</span>
+      </div>
+
       {/* Table */}
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-        <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 280px)" }}>
+        <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 320px)" }}>
           <table className="border-collapse text-xs w-max">
             <thead className="sticky top-0 z-20">
               <tr>
-                {/* Only Etapas is sticky */}
                 <th className="sticky left-0 z-30 bg-muted border-b border-r px-2 text-left font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap" style={{ minWidth: 200 }}>Etapas</th>
                 <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 60 }}>Peso</th>
-                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 90 }}>Previsto</th>
-                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 90 }}>Realizado</th>
-                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 80 }}>Real x Prev</th>
+                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 90 }}>PV Total</th>
+                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 90 }}>AC Total</th>
+                <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 80 }}>AC/PV</th>
                 <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 85 }}>Data Inicial</th>
                 <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 85 }}>Data Final</th>
                 <th className="bg-muted border-b border-r px-1 text-center font-semibold text-muted-foreground whitespace-nowrap" style={{ minWidth: 70 }}>Duração</th>
@@ -336,12 +291,12 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                 const hasChildren = stages.some(s => s.parent_id === stage.id);
                 const isExpanded = expanded.has(stage.id);
                 const stageTotal = getStageTotalValue(stage, stages);
-                const realizado = getRealizado(stage.id);
-                const realVsPrev = stageTotal > 0 ? (realizado / stageTotal) * 100 : 0;
+                const stagePVTotal = getTotalForStage(pvValues, stage.id);
+                const stageACTotal = getTotalForStage(acValues, stage.id);
+                const acVsPv = stagePVTotal > 0 ? (stageACTotal / stagePVTotal) * 100 : 0;
                 const isRoot = !stage.parent_id;
                 const peso = isRoot && grandTotal > 0 && stageTotal > 0 ? (stageTotal / grandTotal) * 100 : null;
 
-                // For taxas stages, Data Inicial = Data Final = due date (start_date)
                 const isTaxas = stage.stage_type === 'taxas';
                 const plannedDates = hasChildren
                   ? getEffectiveDates(stage, stages)
@@ -367,7 +322,6 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
 
                 return (
                   <tr key={stage.id} className={cn("border-b hover:bg-muted/20 transition-colors", rowBg)}>
-                    {/* Etapa name - ONLY sticky column */}
                     <td className={cn("sticky left-0 z-10 border-r px-1 whitespace-nowrap", cellStickyBg, fontSize, hasChildren && "font-semibold")} style={{ paddingLeft: `${stage.level * 16 + 8}px`, minWidth: 200 }}>
                       <div className="flex items-center gap-1">
                         {hasChildren ? (
@@ -378,64 +332,59 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                         <span className="text-foreground/80 truncate max-w-[160px]">{stage.code} - {stage.name}</span>
                       </div>
                     </td>
-                    {/* Peso - scrolls */}
                     <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 60 }}>
                       {peso !== null ? fmtPercent(peso) : "-"}
                     </td>
-                    {/* Previsto - scrolls */}
                     <td className={cn("border-r px-1 text-right text-foreground/80 whitespace-nowrap", fontSize)} style={{ minWidth: 90 }}>
                       {stageTotal > 0 ? `R$ ${fmt(stageTotal)}` : "-"}
                     </td>
-                    {/* Realizado - scrolls */}
                     <td className={cn("border-r px-1 text-right text-foreground/80 whitespace-nowrap", fontSize)} style={{ minWidth: 90 }}>
-                      {realizado > 0 ? `R$ ${fmt(realizado)}` : "-"}
+                      {stageACTotal > 0 ? `R$ ${fmt(stageACTotal)}` : "-"}
                     </td>
-                    {/* Real x Previsto - scrolls */}
-                    <td className={cn("border-r px-1 text-center", fontSize, realVsPrev > 100 ? "text-destructive" : "text-foreground/70")} style={{ minWidth: 80 }}>
-                      {stageTotal > 0 ? fmtPercent(realVsPrev) : "-"}
+                    <td className={cn("border-r px-1 text-center", fontSize, acVsPv > 100 ? "text-destructive" : "text-foreground/70")} style={{ minWidth: 80 }}>
+                      {stagePVTotal > 0 ? fmtPercent(acVsPv) : "-"}
                     </td>
-                    {/* Data Inicial */}
                     <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 85 }}>
                       {plannedDates.start ? formatDateBR(plannedDates.start) : "-"}
                     </td>
-                    {/* Data Final */}
                     <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 85 }}>
                       {plannedDates.end ? formatDateBR(plannedDates.end) : "-"}
                     </td>
-                    {/* Duração planejada */}
                     <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 70 }}>
                       {plannedDuration !== null ? `${plannedDuration} dias` : "-"}
                     </td>
-                    {/* Início da Etapa */}
                     <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 110 }}>
                       {actualDates.start ? formatDateBR(actualDates.start) : "-"}
                     </td>
-                    {/* Término da Etapa */}
                     <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 110 }}>
                       {actualDates.end ? formatDateBR(actualDates.end) : "-"}
                     </td>
-                    {/* Duração real */}
                     <td className={cn("border-r px-1 text-center text-foreground/70", fontSize)} style={{ minWidth: 70 }}>
                       {actualDuration !== null ? `${actualDuration} dias` : "-"}
                     </td>
-                    {/* Month cells */}
+                    {/* Month cells: PV + AC */}
                     {groupedColumns.map(col => {
-                      const val = hasChildren
-                        ? getAggregatedGroupValue(stage.id, col.monthKeys)
-                        : getStageGroupValue(stage.id, col.monthKeys);
-                      const pct = stageTotal > 0 ? (val / stageTotal) * 100 : 0;
-                      const isEditing = editingCell?.stageId === stage.id && editingCell?.colKey === col.key;
+                      const pvVal = hasChildren
+                        ? getAggregatedValue(pvValues, stage.id, col.monthKeys)
+                        : getMapValue(pvValues, stage.id, col.monthKeys);
+                      const acVal = hasChildren
+                        ? getAggregatedValue(acValues, stage.id, col.monthKeys)
+                        : getMapValue(acValues, stage.id, col.monthKeys);
 
                       return (
-                        <td
-                          key={col.key}
-                          className="border-r px-1 text-right"
-                          style={{ minWidth: COL_WIDTH_MONTH }}
-                        >
-                          {val > 0 ? (
-                            <div className="flex flex-col items-end">
-                              <span className={cn("text-foreground/90 font-medium", fontSize)}>R$ {fmt(val)}</span>
-                              <span className="text-muted-foreground text-[10px]">{fmtPercent(pct)}</span>
+                        <td key={col.key} className="border-r px-1 text-right" style={{ minWidth: COL_WIDTH_MONTH }}>
+                          {pvVal > 0 || acVal > 0 ? (
+                            <div className="flex flex-col items-end gap-0.5">
+                              {pvVal > 0 && (
+                                <span className={cn("text-blue-600 dark:text-blue-400", fontSize)}>
+                                  PV {fmt(pvVal)}
+                                </span>
+                              )}
+                              {acVal > 0 && (
+                                <span className={cn("text-green-700 dark:text-green-400 font-medium", fontSize)}>
+                                  AC {fmt(acVal)}
+                                </span>
+                              )}
                             </div>
                           ) : (
                             <span className="text-muted-foreground/50">-</span>
@@ -447,59 +396,141 @@ export default function PhysicalFinancialSchedule({ studyId }: Props) {
                 );
               })}
 
-              {/* Footer: Total Mensal - larger font + bold */}
-              <tr className="bg-muted/30 border-t-2">
-                <td className="sticky left-0 z-10 bg-muted border-r px-2 text-sm font-bold text-foreground whitespace-nowrap">Total Mensal</td>
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r px-1 text-right text-sm font-bold text-foreground whitespace-nowrap">R$ {fmt(grandTotal)}</td>
-                <td className="bg-muted border-r px-1 text-right text-sm font-bold text-foreground whitespace-nowrap">
-                  {(() => { const total = stages.filter(s => !stages.some(c => c.parent_id === s.id)).reduce((sum, s) => sum + getRealizado(s.id), 0); return total > 0 ? `R$ ${fmt(total)}` : "-"; })()}
-                </td>
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
+              {/* Footer: PV Mensal */}
+              <tr className="bg-blue-50/50 dark:bg-blue-950/20 border-t-2">
+                <td className="sticky left-0 z-10 bg-blue-50 dark:bg-blue-950/30 border-r px-2 text-sm font-bold text-blue-700 dark:text-blue-300 whitespace-nowrap">PV Mensal</td>
+                <td className="bg-blue-50 dark:bg-blue-950/30 border-r" />
+                <td className="bg-blue-50 dark:bg-blue-950/30 border-r px-1 text-right text-sm font-bold text-blue-700 dark:text-blue-300 whitespace-nowrap">R$ {fmt(grandTotal)}</td>
+                <td className="bg-blue-50 dark:bg-blue-950/30 border-r" />
+                <td className="bg-blue-50 dark:bg-blue-950/30 border-r" />
+                <td className="bg-blue-50 dark:bg-blue-950/30 border-r" />
+                <td className="bg-blue-50 dark:bg-blue-950/30 border-r" />
+                <td className="bg-blue-50 dark:bg-blue-950/30 border-r" />
+                <td className="bg-blue-50 dark:bg-blue-950/30 border-r" />
+                <td className="bg-blue-50 dark:bg-blue-950/30 border-r" />
+                <td className="bg-blue-50 dark:bg-blue-950/30 border-r" />
                 {groupedColumns.map(col => {
-                  const total = getFooterGroupTotal(col.monthKeys);
+                  const total = getFooterTotal(pvValues, col.monthKeys);
                   return (
-                    <td key={col.key} className="border-r px-1 text-right bg-muted" style={{ minWidth: COL_WIDTH_MONTH }}>
+                    <td key={col.key} className="border-r px-1 text-right bg-blue-50 dark:bg-blue-950/30" style={{ minWidth: COL_WIDTH_MONTH }}>
                       {total > 0 ? (
-                        <div className="flex flex-col items-end">
-                          <span className="text-sm font-bold text-foreground">R$ {fmt(total)}</span>
-                          <span className="text-[10px] text-muted-foreground font-medium">{grandTotal > 0 ? fmtPercent((total / grandTotal) * 100) : "-"}</span>
-                        </div>
+                        <span className="text-sm font-bold text-blue-700 dark:text-blue-300">R$ {fmt(total)}</span>
                       ) : "-"}
                     </td>
                   );
                 })}
               </tr>
 
-              {/* Footer: Acumulado - larger font + bold */}
-              <tr className="bg-muted/30">
-                <td className="sticky left-0 z-10 bg-muted border-r px-2 text-sm font-bold text-foreground whitespace-nowrap">Acumulado</td>
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
-                <td className="bg-muted border-r" />
+              {/* Footer: AC Mensal */}
+              <tr className="bg-green-50/50 dark:bg-green-950/20">
+                <td className="sticky left-0 z-10 bg-green-50 dark:bg-green-950/30 border-r px-2 text-sm font-bold text-green-700 dark:text-green-300 whitespace-nowrap">AC Mensal</td>
+                <td className="bg-green-50 dark:bg-green-950/30 border-r" />
+                <td className="bg-green-50 dark:bg-green-950/30 border-r" />
+                <td className="bg-green-50 dark:bg-green-950/30 border-r px-1 text-right text-sm font-bold text-green-700 dark:text-green-300 whitespace-nowrap">R$ {fmt(totalAC)}</td>
+                <td className="bg-green-50 dark:bg-green-950/30 border-r" />
+                <td className="bg-green-50 dark:bg-green-950/30 border-r" />
+                <td className="bg-green-50 dark:bg-green-950/30 border-r" />
+                <td className="bg-green-50 dark:bg-green-950/30 border-r" />
+                <td className="bg-green-50 dark:bg-green-950/30 border-r" />
+                <td className="bg-green-50 dark:bg-green-950/30 border-r" />
+                <td className="bg-green-50 dark:bg-green-950/30 border-r" />
+                {groupedColumns.map(col => {
+                  const total = getFooterTotal(acValues, col.monthKeys);
+                  return (
+                    <td key={col.key} className="border-r px-1 text-right bg-green-50 dark:bg-green-950/30" style={{ minWidth: COL_WIDTH_MONTH }}>
+                      {total > 0 ? (
+                        <span className="text-sm font-bold text-green-700 dark:text-green-300">R$ {fmt(total)}</span>
+                      ) : "-"}
+                    </td>
+                  );
+                })}
+              </tr>
+
+              {/* Footer: PV Acumulado */}
+              <tr className="bg-blue-50/30 dark:bg-blue-950/10">
+                <td className="sticky left-0 z-10 bg-blue-50/60 dark:bg-blue-950/20 border-r px-2 text-sm font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">PV Acumulado</td>
+                <td className="bg-blue-50/60 dark:bg-blue-950/20 border-r" />
+                <td className="bg-blue-50/60 dark:bg-blue-950/20 border-r" />
+                <td className="bg-blue-50/60 dark:bg-blue-950/20 border-r" />
+                <td className="bg-blue-50/60 dark:bg-blue-950/20 border-r" />
+                <td className="bg-blue-50/60 dark:bg-blue-950/20 border-r" />
+                <td className="bg-blue-50/60 dark:bg-blue-950/20 border-r" />
+                <td className="bg-blue-50/60 dark:bg-blue-950/20 border-r" />
+                <td className="bg-blue-50/60 dark:bg-blue-950/20 border-r" />
+                <td className="bg-blue-50/60 dark:bg-blue-950/20 border-r" />
+                <td className="bg-blue-50/60 dark:bg-blue-950/20 border-r" />
                 {(() => {
                   let running = 0;
                   return groupedColumns.map(col => {
-                    running += getFooterGroupTotal(col.monthKeys);
+                    running += getFooterTotal(pvValues, col.monthKeys);
                     return (
-                      <td key={col.key} className="border-r px-1 text-right bg-muted" style={{ minWidth: COL_WIDTH_MONTH }}>
+                      <td key={col.key} className="border-r px-1 text-right bg-blue-50/60 dark:bg-blue-950/20" style={{ minWidth: COL_WIDTH_MONTH }}>
                         <div className="flex flex-col items-end">
-                          <span className="text-sm font-bold text-foreground">R$ {fmt(running)}</span>
-                          <span className="text-[10px] text-primary font-medium">{grandTotal > 0 ? fmtPercent((running / grandTotal) * 100) : "-"}</span>
+                          <span className="text-sm font-bold text-blue-600 dark:text-blue-400">R$ {fmt(running)}</span>
+                          <span className="text-[10px] text-blue-500/70">{grandTotal > 0 ? fmtPercent((running / grandTotal) * 100) : "-"}</span>
                         </div>
+                      </td>
+                    );
+                  });
+                })()}
+              </tr>
+
+              {/* Footer: AC Acumulado */}
+              <tr className="bg-green-50/30 dark:bg-green-950/10">
+                <td className="sticky left-0 z-10 bg-green-50/60 dark:bg-green-950/20 border-r px-2 text-sm font-bold text-green-600 dark:text-green-400 whitespace-nowrap">AC Acumulado</td>
+                <td className="bg-green-50/60 dark:bg-green-950/20 border-r" />
+                <td className="bg-green-50/60 dark:bg-green-950/20 border-r" />
+                <td className="bg-green-50/60 dark:bg-green-950/20 border-r" />
+                <td className="bg-green-50/60 dark:bg-green-950/20 border-r" />
+                <td className="bg-green-50/60 dark:bg-green-950/20 border-r" />
+                <td className="bg-green-50/60 dark:bg-green-950/20 border-r" />
+                <td className="bg-green-50/60 dark:bg-green-950/20 border-r" />
+                <td className="bg-green-50/60 dark:bg-green-950/20 border-r" />
+                <td className="bg-green-50/60 dark:bg-green-950/20 border-r" />
+                <td className="bg-green-50/60 dark:bg-green-950/20 border-r" />
+                {(() => {
+                  let running = 0;
+                  return groupedColumns.map(col => {
+                    running += getFooterTotal(acValues, col.monthKeys);
+                    return (
+                      <td key={col.key} className="border-r px-1 text-right bg-green-50/60 dark:bg-green-950/20" style={{ minWidth: COL_WIDTH_MONTH }}>
+                        <div className="flex flex-col items-end">
+                          <span className="text-sm font-bold text-green-600 dark:text-green-400">R$ {fmt(running)}</span>
+                          <span className="text-[10px] text-green-500/70">{grandTotal > 0 ? fmtPercent((running / grandTotal) * 100) : "-"}</span>
+                        </div>
+                      </td>
+                    );
+                  });
+                })()}
+              </tr>
+
+              {/* Footer: Desvio (AC - PV) Acumulado */}
+              <tr className="bg-orange-50/30 dark:bg-orange-950/10 border-t">
+                <td className="sticky left-0 z-10 bg-orange-50/60 dark:bg-orange-950/20 border-r px-2 text-sm font-bold text-orange-600 dark:text-orange-400 whitespace-nowrap">Desvio (AC−PV)</td>
+                <td className="bg-orange-50/60 dark:bg-orange-950/20 border-r" />
+                <td className="bg-orange-50/60 dark:bg-orange-950/20 border-r" />
+                <td className="bg-orange-50/60 dark:bg-orange-950/20 border-r" />
+                <td className="bg-orange-50/60 dark:bg-orange-950/20 border-r" />
+                <td className="bg-orange-50/60 dark:bg-orange-950/20 border-r" />
+                <td className="bg-orange-50/60 dark:bg-orange-950/20 border-r" />
+                <td className="bg-orange-50/60 dark:bg-orange-950/20 border-r" />
+                <td className="bg-orange-50/60 dark:bg-orange-950/20 border-r" />
+                <td className="bg-orange-50/60 dark:bg-orange-950/20 border-r" />
+                <td className="bg-orange-50/60 dark:bg-orange-950/20 border-r" />
+                {(() => {
+                  let runningPV = 0;
+                  let runningAC = 0;
+                  return groupedColumns.map(col => {
+                    runningPV += getFooterTotal(pvValues, col.monthKeys);
+                    runningAC += getFooterTotal(acValues, col.monthKeys);
+                    const desvio = runningAC - runningPV;
+                    return (
+                      <td key={col.key} className="border-r px-1 text-right bg-orange-50/60 dark:bg-orange-950/20" style={{ minWidth: COL_WIDTH_MONTH }}>
+                        {runningPV > 0 || runningAC > 0 ? (
+                          <span className={cn("text-sm font-bold", desvio > 0 ? "text-destructive" : desvio < 0 ? "text-green-600 dark:text-green-400" : "text-foreground/70")}>
+                            {desvio >= 0 ? "+" : ""}R$ {fmt(desvio)}
+                          </span>
+                        ) : "-"}
                       </td>
                     );
                   });

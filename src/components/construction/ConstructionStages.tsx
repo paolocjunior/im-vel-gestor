@@ -512,18 +512,76 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     }
   };
 
+  /** Recalculate and persist PV monthly values for a stage based on its period and total_value.
+   *  PV is distributed proportionally by calendar days across intersecting months. */
+  const recalcPVMonthly = async (stageId: string) => {
+    const stage = (await supabase.from("construction_stages" as any)
+      .select("start_date, end_date, total_value, stage_type")
+      .eq("id", stageId).single()).data as any;
+    if (!stage) return;
+
+    // Delete existing PV rows for this stage
+    await supabase.from("construction_stage_monthly_values" as any)
+      .delete()
+      .eq("stage_id", stageId)
+      .eq("study_id", studyId)
+      .eq("value_type", "planned");
+
+    const start = stage.start_date as string | null;
+    const end = stage.end_date as string | null;
+    const total = Number(stage.total_value) || 0;
+    if (!start || !end || total <= 0) return;
+
+    // For taxas, start === end, all PV goes to that month
+    const startD = new Date(start + "T12:00:00");
+    const endD = new Date(end + "T12:00:00");
+    const totalDays = Math.round((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    if (totalDays <= 0) return;
+
+    // Iterate months from start to end
+    let cur = new Date(startD);
+    const monthEntries: { month_key: string; days: number }[] = [];
+    while (cur <= endD) {
+      const y = cur.getFullYear();
+      const m = cur.getMonth() + 1;
+      const monthKey = `${y}-${String(m).padStart(2, "0")}`;
+      const monthStart = new Date(y, m - 1, 1);
+      const monthEnd = new Date(y, m, 0); // last day of month
+      const effStart = startD > monthStart ? startD : monthStart;
+      const effEnd = endD < monthEnd ? endD : monthEnd;
+      const days = Math.round((effEnd.getTime() - effStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      if (days > 0) monthEntries.push({ month_key: monthKey, days });
+      // Move to first day of next month
+      cur = new Date(y, m, 1);
+    }
+
+    // Insert PV rows proportionally
+    for (const entry of monthEntries) {
+      const pvValue = (entry.days / totalDays) * total;
+      if (pvValue > 0) {
+        await supabase.from("construction_stage_monthly_values" as any)
+          .insert({
+            stage_id: stageId,
+            study_id: studyId,
+            month_key: entry.month_key,
+            value: Math.round(pvValue * 100) / 100,
+            value_type: "planned",
+          } as any);
+      }
+    }
+  };
+
   const handleFieldChange = async (stageId: string, field: string, value: any) => {
     const update: any = { [field]: value };
     
     // When changing stage_type, reset status to appropriate default and clear incompatible fields
     if (field === "stage_type") {
       if (value === 'taxas') {
-        // Taxas: clear unit/qty/unit_price, set status to em_aberto
         update.unit_id = null;
         update.quantity = 0;
         update.unit_price = 0;
         update.status = 'em_aberto';
-        update.end_date = null; // Only uses start_date as vencimento
+        update.end_date = null;
       } else if (value === 'material') {
         update.status = 'pending';
       } else {
@@ -541,6 +599,11 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     }
     await supabase.from("construction_stages" as any).update(update).eq("id", stageId);
 
+    // Recalculate PV when total_value or dates change
+    if (field === "quantity" || field === "unit_price" || field === "total_value") {
+      await recalcPVMonthly(stageId);
+    }
+
     // Sync taxas value/date changes to linked bill
     const stage = stages.find(s => s.id === stageId);
     if (stage?.stage_type === 'taxas' && (field === "total_value" || update.total_value !== undefined)) {
@@ -552,7 +615,6 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       if (linkedBills && linkedBills.length > 0) {
         for (const bill of linkedBills) {
           await supabase.from("bills").update({ total_amount: newTotal }).eq("id", bill.id);
-          // Update pending installments amount too
           await supabase.from("bill_installments").update({ amount: newTotal })
             .eq("bill_id", bill.id).eq("status", "PENDING");
         }
@@ -583,6 +645,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     await supabase.from("construction_stages" as any)
       .update({ start_date: startDate, end_date: endDate })
       .eq("id", stageId);
+    await recalcPVMonthly(stageId);
     fetchStages();
     onStagesChanged();
   };
@@ -591,6 +654,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
     await supabase.from("construction_stages" as any)
       .update({ start_date: date, end_date: date })
       .eq("id", stageId);
+    await recalcPVMonthly(stageId);
     // Sync taxas date to linked bill's first_due_date and installment due_date
     const stage = stages.find(s => s.id === stageId);
     if (stage?.stage_type === 'taxas' && date) {

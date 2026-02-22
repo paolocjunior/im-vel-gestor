@@ -463,18 +463,20 @@ export default function MeasurementExecution({ studyId }: Props) {
     // Insert monthly value for the payment month in physical-financial schedule
     const paidDate = new Date(payDate + "T12:00:00");
     const monthKey = `${paidDate.getFullYear()}-${String(paidDate.getMonth() + 1).padStart(2, "0")}`;
-    // Remove any existing monthly value for this stage first
+    // Remove any existing actual monthly value for this stage first
     await supabase.from("construction_stage_monthly_values" as any)
       .delete()
       .eq("stage_id", payStage.id)
-      .eq("study_id", studyId);
-    // Insert the paid value in the correct month
+      .eq("study_id", studyId)
+      .eq("value_type", "actual");
+    // Insert the paid value in the correct month as actual
     await supabase.from("construction_stage_monthly_values" as any)
       .insert({
         stage_id: payStage.id,
         study_id: studyId,
         month_key: monthKey,
         value: payStage.total_value,
+        value_type: "actual",
       } as any);
 
     setPayingLoading(false);
@@ -530,13 +532,14 @@ export default function MeasurementExecution({ studyId }: Props) {
       }
     }
 
-    // Insert measurement record
+    // Insert measurement record with unit_price for historical preservation
     await supabase.from("construction_measurements" as any)
       .insert({
         study_id: studyId,
         stage_id: moStage.id,
         measurement_date: moDate,
         quantity: qty,
+        unit_price: moStage.unit_price,
         provider_id: hasProvider ? moProviderId : null,
         contract_id: contractId,
         notes: moNotes.trim() || null,
@@ -604,30 +607,48 @@ export default function MeasurementExecution({ studyId }: Props) {
         .eq("id", moStage.id);
     }
 
-    // Insert monthly value for the physical-financial schedule
+    // Recalculate AC for the month from ALL measurements (source of truth)
     const mDate = new Date(moDate + "T12:00:00");
     const monthKey = `${mDate.getFullYear()}-${String(mDate.getMonth() + 1).padStart(2, "0")}`;
-    const valueForMonth = qty * moStage.unit_price;
 
-    // Check if there's already a value for this month
-    const { data: existingMonthly } = await supabase.from("construction_stage_monthly_values" as any)
-      .select("id, value")
+    // Fetch all measurements for this stage in this month
+    const monthStart = `${monthKey}-01`;
+    const lastDay = new Date(mDate.getFullYear(), mDate.getMonth() + 1, 0).getDate();
+    const monthEnd = `${monthKey}-${String(lastDay).padStart(2, "0")}`;
+
+    const { data: monthMeasurements } = await supabase.from("construction_measurements" as any)
+      .select("quantity, unit_price, measurement_type")
+      .eq("stage_id", moStage.id)
+      .eq("is_deleted", false)
+      .gte("measurement_date", monthStart)
+      .lte("measurement_date", monthEnd);
+
+    const acMonth = (monthMeasurements || []).reduce((sum: number, m: any) => {
+      const sign = m.measurement_type === 'reversal' ? -1 : 1;
+      return sum + sign * Number(m.quantity) * Number(m.unit_price);
+    }, 0);
+
+    // Upsert AC value for this month (value_type = 'actual')
+    const { data: existingAC } = await supabase.from("construction_stage_monthly_values" as any)
+      .select("id")
       .eq("stage_id", moStage.id)
       .eq("study_id", studyId)
       .eq("month_key", monthKey)
+      .eq("value_type", "actual")
       .maybeSingle();
 
-    if (existingMonthly) {
+    if (existingAC) {
       await supabase.from("construction_stage_monthly_values" as any)
-        .update({ value: Number((existingMonthly as any).value) + valueForMonth })
-        .eq("id", (existingMonthly as any).id);
-    } else {
+        .update({ value: acMonth })
+        .eq("id", (existingAC as any).id);
+    } else if (acMonth > 0) {
       await supabase.from("construction_stage_monthly_values" as any)
         .insert({
           stage_id: moStage.id,
           study_id: studyId,
           month_key: monthKey,
-          value: valueForMonth,
+          value: acMonth,
+          value_type: "actual",
         } as any);
     }
 
