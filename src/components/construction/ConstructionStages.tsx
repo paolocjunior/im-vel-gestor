@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { formatBRNumber } from "@/components/ui/masked-number-input";
@@ -514,7 +514,7 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
   /** Recalculate and persist PV monthly values for a stage based on its period and total_value.
    *  PV is distributed proportionally by calendar days across intersecting months.
-   *  The last month absorbs rounding difference so Σ PV_mês = total_value exactly. */
+   *  Guarantees: Σ PV_mês = total_value exactly AND no PV month is negative. */
   const recalcPVMonthly = async (stageId: string) => {
     const stage = (await supabase.from("construction_stages" as any)
       .select("start_date, end_date, total_value, stage_type")
@@ -523,23 +523,26 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
       .single()).data as any;
     if (!stage) return;
 
-    // Delete existing PV rows for this stage
-    await supabase.from("construction_stage_monthly_values" as any)
-      .delete()
-      .eq("stage_id", stageId)
-      .eq("study_id", studyId)
-      .eq("value_type", "planned");
-
     let start = stage.start_date as string | null;
     let end = stage.end_date as string | null;
-    const total = Number(stage.total_value) || 0;
+    const total = Math.round((Number(stage.total_value) || 0) * 100) / 100;
 
-    // For taxas, force end = start
-    if (stage.stage_type === 'taxas' && start) {
+    // For taxas, force end = start; skip if no start_date
+    if (stage.stage_type === 'taxas') {
+      if (!start) {
+        // No date → delete any existing PV and return
+        await supabase.from("construction_stage_monthly_values" as any)
+          .delete().eq("stage_id", stageId).eq("study_id", studyId).eq("value_type", "planned");
+        return;
+      }
       end = start;
     }
 
-    if (!start || !end || total <= 0) return;
+    if (!start || !end || total <= 0) {
+      await supabase.from("construction_stage_monthly_values" as any)
+        .delete().eq("stage_id", stageId).eq("study_id", studyId).eq("value_type", "planned");
+      return;
+    }
 
     const startD = new Date(start + "T12:00:00");
     const endD = new Date(end + "T12:00:00");
@@ -564,22 +567,31 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
 
     if (monthEntries.length === 0) return;
 
-    // Calculate PV per month, rounding to 2 decimals
-    const pvRows: { month_key: string; value: number }[] = [];
-    let sumSoFar = 0;
-    for (let i = 0; i < monthEntries.length; i++) {
-      if (i === monthEntries.length - 1) {
-        // Last month absorbs rounding difference
-        pvRows.push({ month_key: monthEntries[i].month_key, value: Math.round((total - sumSoFar) * 100) / 100 });
-      } else {
-        const pvValue = Math.round(((monthEntries[i].days / totalDays) * total) * 100) / 100;
-        sumSoFar += pvValue;
-        pvRows.push({ month_key: monthEntries[i].month_key, value: pvValue });
+    // Calculate PV per month with non-negativity guarantee
+    const pvValues: number[] = new Array(monthEntries.length);
+
+    // Round all months except last
+    let sumRounded = 0;
+    for (let i = 0; i < monthEntries.length - 1; i++) {
+      pvValues[i] = Math.round(((monthEntries[i].days / totalDays) * total) * 100) / 100;
+      sumRounded += pvValues[i];
+    }
+    // Last month absorbs rounding difference
+    pvValues[monthEntries.length - 1] = Math.round((total - sumRounded) * 100) / 100;
+
+    // Non-negativity fix: if last month went negative, pull cents from previous months
+    if (pvValues[pvValues.length - 1] < 0) {
+      for (let i = pvValues.length - 2; i >= 0 && pvValues[pvValues.length - 1] < 0; i--) {
+        while (pvValues[i] > 0 && pvValues[pvValues.length - 1] < 0) {
+          pvValues[i] = Math.round((pvValues[i] - 0.01) * 100) / 100;
+          pvValues[pvValues.length - 1] = Math.round((pvValues[pvValues.length - 1] + 0.01) * 100) / 100;
+        }
       }
     }
 
-    // Batch insert all PV rows at once
-    const inserts = pvRows
+    // Build insert rows (filter zeros)
+    const inserts = monthEntries
+      .map((e, i) => ({ month_key: e.month_key, value: pvValues[i] }))
       .filter(r => r.value > 0)
       .map(r => ({
         stage_id: stageId,
@@ -589,21 +601,37 @@ export default function ConstructionStages({ studyId, onStagesChanged, onIncompl
         value_type: "planned",
       }));
 
+    // Delete then insert with minimal gap
+    await supabase.from("construction_stage_monthly_values" as any)
+      .delete().eq("stage_id", stageId).eq("study_id", studyId).eq("value_type", "planned");
+
     if (inserts.length > 0) {
       await supabase.from("construction_stage_monthly_values" as any)
         .insert(inserts as any);
     }
   };
 
-  // Debounced PV recalc to avoid excessive writes during typing
-  const pvRecalcTimers = useState<Record<string, ReturnType<typeof setTimeout>>>({})[0];
-  const debouncedRecalcPV = (stageId: string) => {
-    if (pvRecalcTimers[stageId]) clearTimeout(pvRecalcTimers[stageId]);
-    pvRecalcTimers[stageId] = setTimeout(() => {
+  // Stable ref for debounce timers — survives re-renders, cleaned up on unmount
+  const pvRecalcTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  useEffect(() => {
+    return () => {
+      // Cleanup all pending timers on unmount
+      const timers = pvRecalcTimersRef.current;
+      for (const key of Object.keys(timers)) {
+        clearTimeout(timers[key]);
+      }
+    };
+  }, []);
+
+  const debouncedRecalcPV = useCallback((stageId: string) => {
+    const timers = pvRecalcTimersRef.current;
+    if (timers[stageId]) clearTimeout(timers[stageId]);
+    timers[stageId] = setTimeout(() => {
       recalcPVMonthly(stageId);
-      delete pvRecalcTimers[stageId];
+      delete timers[stageId];
     }, 600);
-  };
+  }, [studyId]);
 
   const handleFieldChange = async (stageId: string, field: string, value: any) => {
     const update: any = { [field]: value };
