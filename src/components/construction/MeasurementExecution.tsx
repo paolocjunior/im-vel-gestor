@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -140,6 +140,14 @@ export default function MeasurementExecution({ studyId }: Props) {
   const [providers, setProviders] = useState<{ id: string; full_name: string }[]>([]);
   const [actionKey, setActionKey] = useState(0); // forces Select re-render to reset to placeholder
 
+  // Inline provider creation modal state
+  const [showProviderModal, setShowProviderModal] = useState(false);
+  const [newProviderName, setNewProviderName] = useState("");
+  const [newProviderType, setNewProviderType] = useState("PF");
+  const [newProviderCpfCnpj, setNewProviderCpfCnpj] = useState("");
+  const [newProviderPhone, setNewProviderPhone] = useState("");
+  const [savingProvider, setSavingProvider] = useState(false);
+
   const fetchProviders = useCallback(async () => {
     const { data } = await supabase.from("study_providers")
       .select("id, full_name")
@@ -186,28 +194,31 @@ export default function MeasurementExecution({ studyId }: Props) {
 
   useEffect(() => { fetchStages(); fetchUnits(); fetchBanks(); fetchProviders(); }, [fetchStages, fetchUnits, fetchBanks, fetchProviders]);
 
-  // Restore MO modal state from sessionStorage (after returning from provider form)
-  const restoredRef = useRef(false);
-  useEffect(() => {
-    if (stages.length === 0 || restoredRef.current) return;
-    const saved = sessionStorage.getItem(`mo_modal_${studyId}`);
-    if (!saved) { restoredRef.current = true; return; }
-    restoredRef.current = true;
-    sessionStorage.removeItem(`mo_modal_${studyId}`);
-    try {
-      const data = JSON.parse(saved);
-      const stage = stages.find(s => s.id === data.stageId);
-      if (stage) {
-        setMoStage(stage);
-        setMoHours(data.hours || "");
-        setMoDate(data.date || todayISO());
-        setMoProviderId(data.providerId || "");
-        setMoNotes(data.notes || "");
-        fetchMoRealizado(stage.id);
-        fetchProviders();
-      }
-    } catch { /* ignore */ }
-  }, [stages]);
+  // Save new provider from inline modal
+  const saveNewProvider = async () => {
+    if (!newProviderName.trim()) { toast.error("Nome completo é obrigatório."); return; }
+    if (!newProviderCpfCnpj.trim()) { toast.error("CPF/CNPJ é obrigatório."); return; }
+    setSavingProvider(true);
+    const { data, error } = await supabase.from("study_providers").insert({
+      full_name: newProviderName.trim(),
+      person_type: newProviderType,
+      cpf_cnpj: newProviderCpfCnpj.trim(),
+      phone: newProviderPhone.trim(),
+      study_id: studyId,
+    }).select("id").single();
+    setSavingProvider(false);
+    if (error) { toast.error("Erro ao salvar prestador."); return; }
+    if (data) {
+      await fetchProviders();
+      setMoProviderId(data.id);
+      setShowProviderModal(false);
+      setNewProviderName("");
+      setNewProviderType("PF");
+      setNewProviderCpfCnpj("");
+      setNewProviderPhone("");
+      toast.success("Prestador cadastrado!");
+    }
+  };
 
   useEffect(() => {
     const roots = stages.filter(s => !s.parent_id);
@@ -1015,19 +1026,7 @@ export default function MeasurementExecution({ studyId }: Props) {
                       variant="outline"
                       size="icon"
                       className="shrink-0"
-                      onClick={() => {
-                        // Save current modal state to sessionStorage before navigating
-                        if (moStage) {
-                          sessionStorage.setItem(`mo_modal_${studyId}`, JSON.stringify({
-                            stageId: moStage.id,
-                            hours: moHours,
-                            date: moDate,
-                            providerId: moProviderId,
-                            notes: moNotes,
-                          }));
-                        }
-                        navigate(`/studies/${studyId}/providers/new?from=${encodeURIComponent(`/studies/${studyId}/construction`)}`);
-                      }}
+                      onClick={() => setShowProviderModal(true)}
                       title="Adicionar prestador"
                     >
                       <Plus className="h-4 w-4" />
@@ -1051,6 +1050,47 @@ export default function MeasurementExecution({ studyId }: Props) {
             <Button variant="outline" onClick={() => setMoStage(null)}>Cancelar</Button>
             <Button onClick={saveMoMeasurement} disabled={moSaving}>
               {moSaving ? "Salvando..." : "Salvar Apontamento"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Inline Provider Creation Modal (nested on top of MO modal) */}
+      <Dialog open={showProviderModal} onOpenChange={(open) => { if (!open) setShowProviderModal(false); }}>
+        <DialogContent className="max-w-sm z-[60]">
+          <DialogHeader>
+            <DialogTitle>Cadastro Rápido de Prestador</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Nome Completo *</Label>
+              <Input value={newProviderName} onChange={e => setNewProviderName(e.target.value)} placeholder="Nome do prestador" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Tipo *</Label>
+                <Select value={newProviderType} onValueChange={v => { setNewProviderType(v); setNewProviderCpfCnpj(""); }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PF">Pessoa Física</SelectItem>
+                    <SelectItem value="PJ">Pessoa Jurídica</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>{newProviderType === "PJ" ? "CNPJ" : "CPF"} *</Label>
+                <Input value={newProviderCpfCnpj} onChange={e => setNewProviderCpfCnpj(e.target.value)} maxLength={newProviderType === "PJ" ? 18 : 14} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Telefone</Label>
+              <Input value={newProviderPhone} onChange={e => setNewProviderPhone(e.target.value)} maxLength={14} />
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowProviderModal(false)}>Cancelar</Button>
+            <Button onClick={saveNewProvider} disabled={savingProvider}>
+              {savingProvider ? "Salvando..." : "Salvar Prestador"}
             </Button>
           </DialogFooter>
         </DialogContent>
