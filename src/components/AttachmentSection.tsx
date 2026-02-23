@@ -117,16 +117,16 @@ export default function AttachmentSection({ studyId, entity, entityId, compact =
   const renderPreviewContent = () => {
     if (previewType.startsWith("image/")) {
       return (
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col gap-3">
           <div className="overflow-auto max-h-[65vh] max-w-full">
             <img
               src={previewUrl}
               alt={previewName}
-              className="object-contain mx-auto transition-transform"
-              style={{ transform: `scale(${zoomLevel})`, transformOrigin: "center center" }}
+              className="block"
+              style={{ width: `${zoomLevel * 100}%`, height: "auto" }}
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center gap-2">
             <Button variant="outline" size="icon" onClick={() => setZoomLevel(z => Math.max(0.25, z - 0.25))}>
               <ZoomOut className="w-4 h-4" />
             </Button>
