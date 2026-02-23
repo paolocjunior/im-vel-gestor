@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRNumber } from "@/components/ui/masked-number-input";
 import {
@@ -12,11 +13,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import BudgetDrawer from "./BudgetDrawer";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 
 /* ─── types ─── */
 interface Stage {
@@ -83,6 +88,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function BudgetView({ studyId }: Props) {
+  const navigate = useNavigate();
   const [stages, setStages] = useState<Stage[]>([]);
   const [quotationItems, setQuotationItems] = useState<QuotationItem[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
@@ -94,6 +100,9 @@ export default function BudgetView({ studyId }: Props) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedStageIds, setSelectedStageIds] = useState<Set<string>>(new Set());
   const [filterApplied, setFilterApplied] = useState(false);
+
+  // checkbox selection for quotation
+  const [checkedStageIds, setCheckedStageIds] = useState<Set<string>>(new Set());
 
   // expand rows
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -295,6 +304,32 @@ export default function BudgetView({ studyId }: Props) {
     setStatusFilter("all");
   };
 
+  /* ─── quotation checkbox helpers ─── */
+  const toggleCheck = (stageId: string) => {
+    setCheckedStageIds(prev => {
+      const next = new Set(prev);
+      if (next.has(stageId)) next.delete(stageId); else next.add(stageId);
+      return next;
+    });
+  };
+
+  const toggleCheckAll = () => {
+    if (checkedStageIds.size === filteredLeaves.length) {
+      setCheckedStageIds(new Set());
+    } else {
+      setCheckedStageIds(new Set(filteredLeaves.map(s => s.id)));
+    }
+  };
+
+  const handleNewQuotation = (type: "email" | "manual") => {
+    if (checkedStageIds.size === 0) {
+      toast.error("Selecione pelo menos uma etapa antes de criar uma cotação");
+      return;
+    }
+    const stageIds = Array.from(checkedStageIds).join(",");
+    navigate(`/studies/${studyId}/quotation-request?type=${type}&stages=${stageIds}`);
+  };
+
   /* ─── export helpers ─── */
   const buildExportRows = () => {
     return filteredLeaves.map(stage => {
@@ -441,6 +476,22 @@ export default function BudgetView({ studyId }: Props) {
         </Button>
 
         <div className="ml-auto flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 text-sm">
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                Nova Cotação {checkedStageIds.size > 0 && `(${checkedStageIds.size})`}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleNewQuotation("email")}>
+                Solicitar por e-mail
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleNewQuotation("manual")}>
+                Lançamento manual
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" size="sm" onClick={handleExportExcel} className="h-9">
             <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
             Excel
@@ -457,6 +508,12 @@ export default function BudgetView({ studyId }: Props) {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-8 px-2">
+                <Checkbox
+                  checked={filteredLeaves.length > 0 && checkedStageIds.size === filteredLeaves.length}
+                  onCheckedChange={toggleCheckAll}
+                />
+              </TableHead>
               <TableHead className="w-8" />
               <TableHead className="text-xs">Código</TableHead>
               <TableHead className="text-xs">Etapa</TableHead>
@@ -473,7 +530,7 @@ export default function BudgetView({ studyId }: Props) {
           <TableBody>
             {filteredLeaves.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-8">
+                <TableCell colSpan={12} className="text-center text-sm text-muted-foreground py-8">
                   Nenhuma etapa de material encontrada
                 </TableCell>
               </TableRow>
@@ -491,6 +548,9 @@ export default function BudgetView({ studyId }: Props) {
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => { setSelectedStageId(stage.id); setDrawerOpen(true); }}
                     >
+                      <TableCell className="px-2" onClick={e => e.stopPropagation()}>
+                        <Checkbox checked={checkedStageIds.has(stage.id)} onCheckedChange={() => toggleCheck(stage.id)} />
+                      </TableCell>
                       <TableCell className="px-2" onClick={e => { e.stopPropagation(); if (stageProposals.length > 0) toggleExpand(stage.id); }}>
                         {stageProposals.length > 0 ? (
                           isExpanded
@@ -534,6 +594,7 @@ export default function BudgetView({ studyId }: Props) {
                     {/* expanded proposals */}
                     {isExpanded && stageProposals.map(p => (
                       <TableRow key={p.id} className="bg-muted/30">
+                        <TableCell />
                         <TableCell />
                         <TableCell />
                         <TableCell colSpan={2} className="text-xs text-muted-foreground pl-6">
