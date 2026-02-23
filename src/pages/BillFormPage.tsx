@@ -100,7 +100,9 @@ export default function BillFormPage() {
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewName, setPreviewName] = useState("");
   const [previewType, setPreviewType] = useState("");
-  const [imgZoom, setImgZoom] = useState(1);
+   const [imgZoom, setImgZoom] = useState(1);
+   const [imgNatural, setImgNatural] = useState<{ w: number; h: number } | null>(null);
+   const imgBaseWidth = imgNatural ? Math.min(imgNatural.w, 700) : 700;
 
   // Clone change detection
   const [originalSnapshot, setOriginalSnapshot] = useState("");
@@ -1175,13 +1177,13 @@ export default function BillFormPage() {
         </fieldset>
 
         {/* Attachment Preview Dialog */}
-        <Dialog open={previewOpen} onOpenChange={() => { setPreviewOpen(false); if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(""); setImgZoom(1); }}>
+        <Dialog open={previewOpen} onOpenChange={() => { setPreviewOpen(false); if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(""); setImgZoom(1); setImgNatural(null); }}>
           <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
             <DialogHeader><DialogTitle>{previewName}</DialogTitle></DialogHeader>
             {previewType.startsWith("image/") ? (
               <div className="flex flex-col gap-3">
                 <div className="overflow-auto max-h-[65vh] max-w-full">
-                  <img src={previewUrl} alt={previewName} className="block" style={{ width: `${imgZoom * 100}%`, height: "auto" }} />
+                  <img src={previewUrl} alt={previewName} className="block" style={{ width: `${imgBaseWidth * imgZoom}px`, height: "auto", maxWidth: "none" }} onLoad={(e) => { const img = e.currentTarget; setImgNatural({ w: img.naturalWidth, h: img.naturalHeight }); }} />
                 </div>
                 <div className="flex items-center justify-center gap-2">
                   <Button variant="outline" size="icon" onClick={() => setImgZoom(z => Math.max(0.25, z - 0.25))}><ZoomOut className="w-4 h-4" /></Button>
