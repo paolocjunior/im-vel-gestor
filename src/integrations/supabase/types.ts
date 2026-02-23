@@ -1671,6 +1671,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      is_profile_complete: { Args: never; Returns: boolean }
       owns_order: { Args: { p_order_id: string }; Returns: boolean }
       owns_study: { Args: { p_study_id: string }; Returns: boolean }
       soft_delete_study: { Args: { p_study_id: string }; Returns: undefined }
