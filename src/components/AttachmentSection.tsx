@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Paperclip, Upload, X, Download, ChevronDown, ChevronRight, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import PdfPreview from "@/components/PdfPreview";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -115,11 +116,7 @@ export default function AttachmentSection({ studyId, entity, entityId, compact =
       return <img src={previewUrl} alt={previewName} className="max-w-full max-h-[70vh] object-contain mx-auto" />;
     }
     if (previewType === "application/pdf") {
-      return (
-        <object data={previewUrl} type="application/pdf" className="w-full h-[70vh]">
-          <p className="text-sm text-muted-foreground py-8 text-center">Não foi possível exibir o PDF. <a href={previewUrl} download={previewName} className="text-primary underline">Clique aqui para baixar</a>.</p>
-        </object>
-      );
+      return <PdfPreview fileUrl={previewUrl} fileName={previewName} />;
     }
     return <p className="text-sm text-muted-foreground py-8 text-center">Visualização não disponível para este tipo de arquivo. Use o botão de download.</p>;
   };
