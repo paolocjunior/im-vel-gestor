@@ -183,7 +183,7 @@ export async function syncAllPVMonthly(studyId: string, force = false): Promise<
       "sync_pv_monthly" as any,
       {
         p_study_id: studyId,
-        p_rows: JSON.stringify(allInserts),
+        p_rows: allInserts,
       }
     );
 
