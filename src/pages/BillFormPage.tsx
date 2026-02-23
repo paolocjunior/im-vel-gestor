@@ -285,7 +285,7 @@ export default function BillFormPage() {
   const uploadSingleFile = async (targetBillId: string, file: File): Promise<boolean> => {
     const path = `${studyId}/${targetBillId}/${Date.now()}_${file.name}`;
     const { error: uploadErr } = await supabase.storage.from("documents").upload(path, file);
-    if (uploadErr) { toast.error(`Erro ao enviar ${file.name}: ${uploadErr.message}`); return false; }
+    if (uploadErr) { toast.error(`Erro ao enviar ${file.name}: ${uploadErr.message}`, { duration: 10000 }); console.error("Upload error:", uploadErr); return false; }
     const { error: insertErr } = await supabase.from("documents").insert({
       study_id: studyId!,
       entity: "bill",
@@ -295,7 +295,7 @@ export default function BillFormPage() {
       file_size: file.size,
       mime_type: file.type || null,
     });
-    if (insertErr) { toast.error(`Erro ao registrar ${file.name}: ${insertErr.message}`); return false; }
+    if (insertErr) { toast.error(`Erro ao registrar ${file.name}: ${insertErr.message}`, { duration: 10000 }); console.error("Insert error:", insertErr); return false; }
     return true;
   };
 
