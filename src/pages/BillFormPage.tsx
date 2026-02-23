@@ -1179,7 +1179,9 @@ export default function BillFormPage() {
             {previewType.startsWith("image/") ? (
               <img src={previewUrl} alt={previewName} className="max-w-full max-h-[70vh] object-contain mx-auto" />
             ) : previewType === "application/pdf" ? (
-              <iframe src={previewUrl} className="w-full h-[70vh]" title={previewName} />
+              <object data={previewUrl} type="application/pdf" className="w-full h-[70vh]">
+                <p className="text-sm text-muted-foreground py-8 text-center">Não foi possível exibir o PDF. <a href={previewUrl} download={previewName} className="text-primary underline">Clique aqui para baixar</a>.</p>
+              </object>
             ) : (
               <p className="text-sm text-muted-foreground py-8 text-center">Visualização não disponível para este tipo de arquivo. Use o botão de download.</p>
             )}
