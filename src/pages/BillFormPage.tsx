@@ -1179,11 +1179,11 @@ export default function BillFormPage() {
           <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
             <DialogHeader><DialogTitle>{previewName}</DialogTitle></DialogHeader>
             {previewType.startsWith("image/") ? (
-              <div className="flex flex-col items-center gap-3">
+              <div className="flex flex-col gap-3">
                 <div className="overflow-auto max-h-[65vh] max-w-full">
-                  <img src={previewUrl} alt={previewName} className="object-contain mx-auto transition-transform" style={{ transform: `scale(${imgZoom})`, transformOrigin: "center center" }} />
+                  <img src={previewUrl} alt={previewName} className="block" style={{ width: `${imgZoom * 100}%`, height: "auto" }} />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center gap-2">
                   <Button variant="outline" size="icon" onClick={() => setImgZoom(z => Math.max(0.25, z - 0.25))}><ZoomOut className="w-4 h-4" /></Button>
                   <span className="text-sm text-muted-foreground w-16 text-center">{Math.round(imgZoom * 100)}%</span>
                   <Button variant="outline" size="icon" onClick={() => setImgZoom(z => Math.min(4, z + 0.25))}><ZoomIn className="w-4 h-4" /></Button>
