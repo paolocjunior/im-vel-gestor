@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useProfileRecheck } from "@/components/ProtectedRoute";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +24,7 @@ const emptyForm = {
 export default function ProfileCompletionPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const recheck = useProfileRecheck();
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [lookingUpCep, setLookingUpCep] = useState(false);
@@ -119,6 +121,7 @@ export default function ProfileCompletionPage() {
     setSaving(false);
     if (error) { toast.error("Erro ao salvar: " + error.message); return; }
     toast.success("Cadastro atualizado!");
+    if (recheck) await recheck();
     navigate("/hub");
   };
 
