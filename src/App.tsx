@@ -24,6 +24,7 @@ import ChangePasswordPage from "./pages/ChangePasswordPage";
 import BillsPage from "./pages/BillsPage";
 import BillFormPage from "./pages/BillFormPage";
 import ConstructionPage from "./pages/ConstructionPage";
+import ProfileCompletionPage from "./pages/ProfileCompletionPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,7 @@ const App = () => (
             <Route path="/" element={<Navigate to="/hub" replace />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/password-reset" element={<PasswordResetPage />} />
+            <Route path="/profile/complete" element={<P><ProfileCompletionPage /></P>} />
             <Route path="/hub" element={<P><HubPage /></P>} />
             <Route path="/settings" element={<P><SettingsPage /></P>} />
             <Route path="/settings/change-password" element={<P><ChangePasswordPage /></P>} />

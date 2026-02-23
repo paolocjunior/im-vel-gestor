@@ -756,23 +756,77 @@ export type Database = {
       }
       profiles: {
         Row: {
+          additional_info: string | null
+          bank_account: string | null
+          bank_account_type: string | null
+          bank_agency: string | null
+          bank_holder_name: string | null
+          bank_name: string | null
+          bank_pix: string | null
+          cep: string | null
+          city: string | null
+          complement: string | null
+          cpf_cnpj: string | null
           created_at: string
+          email: string | null
           full_name: string | null
           id: string
+          neighborhood: string | null
+          person_type: string
+          phone: string | null
+          state: string | null
+          street: string | null
+          street_number: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          additional_info?: string | null
+          bank_account?: string | null
+          bank_account_type?: string | null
+          bank_agency?: string | null
+          bank_holder_name?: string | null
+          bank_name?: string | null
+          bank_pix?: string | null
+          cep?: string | null
+          city?: string | null
+          complement?: string | null
+          cpf_cnpj?: string | null
           created_at?: string
+          email?: string | null
           full_name?: string | null
           id?: string
+          neighborhood?: string | null
+          person_type?: string
+          phone?: string | null
+          state?: string | null
+          street?: string | null
+          street_number?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          additional_info?: string | null
+          bank_account?: string | null
+          bank_account_type?: string | null
+          bank_agency?: string | null
+          bank_holder_name?: string | null
+          bank_name?: string | null
+          bank_pix?: string | null
+          cep?: string | null
+          city?: string | null
+          complement?: string | null
+          cpf_cnpj?: string | null
           created_at?: string
+          email?: string | null
           full_name?: string | null
           id?: string
+          neighborhood?: string | null
+          person_type?: string
+          phone?: string | null
+          state?: string | null
+          street?: string | null
+          street_number?: string | null
           updated_at?: string
           user_id?: string
         }
