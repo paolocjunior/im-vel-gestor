@@ -77,13 +77,13 @@ function getMonthEnd(dateStr: string): string {
   return `${y}-${String(m).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
 }
 
-const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+// MONTHS_PT removed — labels now use MM/YYYY numeric format
 
 function formatHeaderLabel(dateStr: string, scale: TimeScale): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   if (scale === "daily") return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
-  if (scale === "weekly") return `${String(d).padStart(2, "0")}/${MONTHS_PT[m - 1]}`;
-  return `${MONTHS_PT[m - 1]}/${y}`;
+  if (scale === "weekly") return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
+  return `${String(m).padStart(2, "0")}/${y}`;
 }
 
 /** Compute effective date range for a parent stage based on children */

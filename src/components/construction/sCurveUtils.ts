@@ -10,7 +10,7 @@
  * 7. value_type filtrado explicitamente: apenas 'planned' e 'actual'.
  */
 
-import { MONTHS_PT } from "./schedule/scheduleUtils";
+// MONTHS_PT no longer needed for formatMonthLabel — uses MM/YYYY now
 
 // --- Types ---
 
@@ -65,8 +65,7 @@ export function getLeafStageIds(stages: StageMinimal[]): Set<string> {
 
 function formatMonthLabel(mk: string): string {
   const [yearStr, monthStr] = mk.split("-");
-  const monthIdx = parseInt(monthStr, 10) - 1;
-  return `${MONTHS_PT[monthIdx]}/${yearStr}`;
+  return `${monthStr}/${yearStr}`;
 }
 
 function generateMonthRange(min: string, max: string): string[] {
