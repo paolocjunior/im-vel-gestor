@@ -771,6 +771,7 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          inscricao_estadual: string | null
           neighborhood: string | null
           person_type: string
           phone: string | null
@@ -796,6 +797,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          inscricao_estadual?: string | null
           neighborhood?: string | null
           person_type?: string
           phone?: string | null
@@ -821,6 +823,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          inscricao_estadual?: string | null
           neighborhood?: string | null
           person_type?: string
           phone?: string | null
@@ -920,6 +923,114 @@ export type Database = {
           },
           {
             foreignKeyName: "purchase_orders_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "study_vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quotation_request_items: {
+        Row: {
+          created_at: string
+          id: string
+          observation: string | null
+          position: number
+          request_id: string
+          stage_id: string
+          total_price: number | null
+          unit_price: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          observation?: string | null
+          position?: number
+          request_id: string
+          stage_id: string
+          total_price?: number | null
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          observation?: string | null
+          position?: number
+          request_id?: string
+          stage_id?: string
+          total_price?: number | null
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotation_request_items_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "quotation_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotation_request_items_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "construction_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quotation_requests: {
+        Row: {
+          created_at: string
+          id: string
+          message: string | null
+          quotation_number: number
+          request_type: string
+          sent_at: string | null
+          status: string
+          study_id: string
+          updated_at: string
+          vendor_email: string | null
+          vendor_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          quotation_number?: number
+          request_type?: string
+          sent_at?: string | null
+          status?: string
+          study_id: string
+          updated_at?: string
+          vendor_email?: string | null
+          vendor_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          quotation_number?: number
+          request_type?: string
+          sent_at?: string | null
+          status?: string
+          study_id?: string
+          updated_at?: string
+          vendor_email?: string | null
+          vendor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotation_requests_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotation_requests_vendor_id_fkey"
             columns: ["vendor_id"]
             isOneToOne: false
             referencedRelation: "study_vendors"
