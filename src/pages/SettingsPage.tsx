@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Key, Plus, Trash2, ChevronDown, ChevronRight, Sun, Moon, Pencil } from "lucide-react";
+import { ArrowLeft, Key, Plus, Trash2, ChevronDown, ChevronRight, Sun, Moon, Pencil, User } from "lucide-react";
 import GlobalTopbar from "@/components/GlobalTopbar";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -412,6 +412,10 @@ export default function SettingsPage() {
           <Button variant="outline" size="sm" onClick={() => { window.history.length > 1 ? navigate(-1) : navigate("/hub"); }}>
             <ArrowLeft className="h-4 w-4 mr-1.5" />
             Voltar
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => navigate("/profile/complete")}>
+            <User className="h-4 w-4 mr-1.5" />
+            Meu Cadastro
           </Button>
           <Button variant="outline" size="sm" onClick={() => navigate("/settings/change-password")}>
             <Key className="h-4 w-4 mr-1.5" />
