@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { Paperclip, Upload, X, Download } from "lucide-react";
+import { Paperclip, Upload, X, Download, ZoomIn, ZoomOut } from "lucide-react";
 import PdfPreview from "@/components/PdfPreview";
 import { MonthRangePicker } from "@/components/MonthRangePicker";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
@@ -100,6 +100,7 @@ export default function BillFormPage() {
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewName, setPreviewName] = useState("");
   const [previewType, setPreviewType] = useState("");
+  const [imgZoom, setImgZoom] = useState(1);
 
   // Clone change detection
   const [originalSnapshot, setOriginalSnapshot] = useState("");
@@ -1174,11 +1175,21 @@ export default function BillFormPage() {
         </fieldset>
 
         {/* Attachment Preview Dialog */}
-        <Dialog open={previewOpen} onOpenChange={() => { setPreviewOpen(false); if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(""); }}>
+        <Dialog open={previewOpen} onOpenChange={() => { setPreviewOpen(false); if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(""); setImgZoom(1); }}>
           <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
             <DialogHeader><DialogTitle>{previewName}</DialogTitle></DialogHeader>
             {previewType.startsWith("image/") ? (
-              <img src={previewUrl} alt={previewName} className="max-w-full max-h-[70vh] object-contain mx-auto" />
+              <div className="flex flex-col items-center gap-3">
+                <div className="overflow-auto max-h-[65vh] max-w-full">
+                  <img src={previewUrl} alt={previewName} className="object-contain mx-auto transition-transform" style={{ transform: `scale(${imgZoom})`, transformOrigin: "center center" }} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="icon" onClick={() => setImgZoom(z => Math.max(0.25, z - 0.25))}><ZoomOut className="w-4 h-4" /></Button>
+                  <span className="text-sm text-muted-foreground w-16 text-center">{Math.round(imgZoom * 100)}%</span>
+                  <Button variant="outline" size="icon" onClick={() => setImgZoom(z => Math.min(4, z + 0.25))}><ZoomIn className="w-4 h-4" /></Button>
+                  <Button variant="outline" size="sm" onClick={() => setImgZoom(1)}>Reset</Button>
+                </div>
+              </div>
             ) : previewType === "application/pdf" ? (
               <PdfPreview fileUrl={previewUrl} fileName={previewName} />
             ) : (
