@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatBRNumber } from "@/components/ui/masked-number-input";
 import {
   DollarSign, CheckCircle2, AlertCircle, ShoppingCart, Package, PackageCheck,
-  Search, Filter, RefreshCw, ChevronDown, ChevronRight,
+  Search, Filter, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet, FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -289,6 +289,65 @@ export default function BudgetView({ studyId }: Props) {
     setStatusFilter("all");
   };
 
+  /* ─── export helpers ─── */
+  const buildExportRows = () => {
+    return filteredLeaves.map(stage => {
+      const qi = qiByStage[stage.id];
+      const status = qi?.status || "pending";
+      const best = getBestProposal(stage.id);
+      return {
+        "Código": stage.code,
+        "Etapa": stage.name,
+        "Tipo": stage.stage_type ? TYPE_LABELS[stage.stage_type] || stage.stage_type : "",
+        "Un": stage.unit_id ? unitMap[stage.unit_id] || "" : "",
+        "Qtde": stage.quantity,
+        "Vlr Ref Unit": stage.unit_price,
+        "Vlr Ref Total": stage.total_value,
+        "Melhor Cot. Unit": best?.unit_price ?? "",
+        "Melhor Cot. Total": best?.total_price ?? "",
+        "Fornecedor": best?.vendor_name || "",
+        "Status": STATUS_LABELS[status] || status,
+      };
+    });
+  };
+
+  const handleExportExcel = async () => {
+    const XLSX = await import("xlsx");
+    const rows = buildExportRows();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Orçamento");
+    XLSX.writeFile(wb, "orcamento.xlsx");
+  };
+
+  const handleExportPDF = async () => {
+    const { default: jsPDF } = await import("jspdf");
+    const autoTable = (await import("jspdf-autotable")).default;
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+    doc.setFontSize(14);
+    doc.text("Orçamento", 14, 15);
+    doc.setFontSize(9);
+    doc.text(`Exportado em ${new Date().toLocaleDateString("pt-BR")}`, 14, 21);
+
+    const rows = buildExportRows();
+    const headers = Object.keys(rows[0] || {});
+    const body = rows.map(r => headers.map(h => {
+      const v = (r as any)[h];
+      return typeof v === "number" ? formatBRNumber(v) : v;
+    }));
+
+    autoTable(doc, {
+      startY: 26,
+      head: [headers],
+      body,
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [47, 111, 109] },
+    });
+
+    doc.save("orcamento.pdf");
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -365,7 +424,15 @@ export default function BudgetView({ studyId }: Props) {
           Limpar
         </Button>
 
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExportExcel} className="h-9">
+            <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
+            Excel
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExportPDF} className="h-9">
+            <FileText className="h-3.5 w-3.5 mr-1.5" />
+            PDF
+          </Button>
           <Button variant="outline" size="sm" onClick={fetchData} className="h-9">
             <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
             Atualizar
