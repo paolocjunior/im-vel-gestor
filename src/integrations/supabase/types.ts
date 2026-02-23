@@ -711,6 +711,7 @@ export type Database = {
           name: string
           neighborhood: string | null
           notes: string | null
+          pv_last_synced_at: string | null
           state: string | null
           status: string
           street: string | null
@@ -728,6 +729,7 @@ export type Database = {
           name: string
           neighborhood?: string | null
           notes?: string | null
+          pv_last_synced_at?: string | null
           state?: string | null
           status?: string
           street?: string | null
@@ -745,6 +747,7 @@ export type Database = {
           name?: string
           neighborhood?: string | null
           notes?: string | null
+          pv_last_synced_at?: string | null
           state?: string | null
           status?: string
           street?: string | null
@@ -1444,6 +1447,10 @@ export type Database = {
       owns_order: { Args: { p_order_id: string }; Returns: boolean }
       owns_study: { Args: { p_study_id: string }; Returns: boolean }
       soft_delete_study: { Args: { p_study_id: string }; Returns: undefined }
+      sync_pv_monthly: {
+        Args: { p_rows: Json; p_study_id: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRNumber } from "@/components/ui/masked-number-input";
-import { Ruler, DollarSign, ShoppingCart, TrendingUp, BarChart3, Layers } from "lucide-react";
+import { Ruler, DollarSign, ShoppingCart, TrendingUp, BarChart3, Layers, AlertTriangle } from "lucide-react";
 import SCurveChart from "./SCurveChart";
 import SCurveExecutiveChart from "./SCurveExecutiveChart";
-import { syncAllPVMonthly } from "@/lib/pvSync";
+import { syncAllPVMonthly, PVSyncResult } from "@/lib/pvSync";
+import { toast } from "sonner";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 interface StageTreeNode {
   id: string;
@@ -38,16 +40,37 @@ export default function ConstructionDashboard({ studyId, stageTree, onNavigateSt
     m2Construido: 0,
     valorM2: 0,
   });
-  const [pvSynced, setPvSynced] = useState(false);
+  const [pvSyncStatus, setPvSyncStatus] = useState<"idle" | "syncing" | "success" | "error">("idle");
+  const [pvSyncError, setPvSyncError] = useState<string | null>(null);
 
   const isDark = document.documentElement.classList.contains("dark");
 
-  // Sync PV monthly on dashboard load (idempotent)
+  // Conditional PV sync — only runs when dirty, with structured error handling
   const pvSyncRef = useRef(false);
   useEffect(() => {
     if (pvSyncRef.current) return;
     pvSyncRef.current = true;
-    syncAllPVMonthly(studyId).then(() => setPvSynced(true));
+
+    setPvSyncStatus("syncing");
+    syncAllPVMonthly(studyId).then((result: PVSyncResult) => {
+      if (!result.ok) {
+        setPvSyncStatus("error");
+        setPvSyncError(result.error || "Erro desconhecido");
+        toast.error("Falha ao sincronizar baseline (PV)", {
+          description: result.error,
+          duration: 8000,
+        });
+        console.error("[pvSync] Sync failed:", result.error);
+      } else {
+        setPvSyncStatus("success");
+        setPvSyncError(null);
+        if (result.skipped) {
+          console.log("[pvSync] Sync skipped — baseline is up to date.");
+        } else {
+          console.log(`[pvSync] Sync complete: ${result.deleted} deleted, ${result.inserted} inserted.`);
+        }
+      }
+    });
   }, [studyId]);
 
   const fetchKpis = useCallback(async () => {
@@ -101,6 +124,8 @@ export default function ConstructionDashboard({ studyId, stageTree, onNavigateSt
 
   const summaryBg = isDark ? 'hsl(180, 28%, 12%)' : 'hsl(180, 28%, 88%)';
 
+  const pvReady = pvSyncStatus === "success";
+
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-foreground">Dashboard</h2>
@@ -124,11 +149,28 @@ export default function ConstructionDashboard({ studyId, stageTree, onNavigateSt
         ))}
       </div>
 
-      {/* Curva S Financeira — Operacional */}
-      {pvSynced && <SCurveChart studyId={studyId} />}
+      {/* PV Sync Error Banner */}
+      {pvSyncStatus === "error" && (
+        <Alert variant="destructive" className="border-destructive/30 bg-destructive/5">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle className="text-sm font-semibold">Falha na sincronização da Baseline (PV)</AlertTitle>
+          <AlertDescription className="text-xs mt-1">
+            {pvSyncError || "Erro desconhecido. Os gráficos de Curva S não serão exibidos até que o problema seja resolvido."}
+          </AlertDescription>
+        </Alert>
+      )}
 
-      {/* Curva S Financeira — Executivo */}
-      {pvSynced && <SCurveExecutiveChart studyId={studyId} />}
+      {/* Syncing indicator */}
+      {pvSyncStatus === "syncing" && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+          Sincronizando baseline…
+        </div>
+      )}
+
+      {/* Curva S — only render when PV sync succeeded */}
+      {pvReady && <SCurveChart studyId={studyId} />}
+      {pvReady && <SCurveExecutiveChart studyId={studyId} />}
     </div>
   );
 }
