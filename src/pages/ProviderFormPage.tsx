@@ -551,8 +551,8 @@ export default function ProviderFormPage() {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-muted-foreground">
-                      <span>Início: {c.start_date}</span>
-                      <span>Fim: {c.end_date || "—"}</span>
+                      <span>Início: {c.start_date ? c.start_date.split("-").reverse().join("/") : "—"}</span>
+                      <span>Fim: {c.end_date ? c.end_date.split("-").reverse().join("/") : "—"}</span>
                       <span>Valor: {c.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
                       <span>Status: {c.status === "ACTIVE" ? "Ativo" : "Finalizado"}</span>
                     </div>
