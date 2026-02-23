@@ -94,6 +94,12 @@ export default function BillFormPage() {
   // À vista payment dialog
   const [avistaConfirmOpen, setAvistaConfirmOpen] = useState(false);
 
+  // Attachment preview
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewName, setPreviewName] = useState("");
+  const [previewType, setPreviewType] = useState("");
+
   // Clone change detection
   const [originalSnapshot, setOriginalSnapshot] = useState("");
 
@@ -301,6 +307,16 @@ export default function BillFormPage() {
     const a = document.createElement("a");
     a.href = url; a.download = doc.file_name; a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handlePreviewAttachment = async (doc: typeof attachments[0]) => {
+    const { data } = await supabase.storage.from("documents").download(doc.file_path);
+    if (!data) { toast.error("Erro ao carregar arquivo."); return; }
+    const url = URL.createObjectURL(data);
+    setPreviewUrl(url);
+    setPreviewName(doc.file_name);
+    setPreviewType(data.type || "");
+    setPreviewOpen(true);
   };
 
   const loadVendors = async () => {
@@ -1120,9 +1136,15 @@ export default function BillFormPage() {
               {attachments.map(doc => (
                 <div key={doc.id} className="flex items-center gap-2 text-sm bg-muted rounded px-2 py-1">
                   <Paperclip className="w-3 h-3" />
-                  <span className="flex-1 truncate">{doc.file_name}</span>
+                  <span
+                    className="flex-1 truncate cursor-pointer hover:underline"
+                    onClick={() => handlePreviewAttachment(doc)}
+                    title="Clique para visualizar"
+                  >
+                    {doc.file_name}
+                  </span>
                   {doc.file_size && <span className="text-muted-foreground text-xs">{(doc.file_size / 1024).toFixed(0)} KB</span>}
-                  <button onClick={() => handleDownloadAttachment(doc)} className="text-primary hover:text-primary/80">
+                  <button onClick={() => handleDownloadAttachment(doc)} className="text-primary hover:text-primary/80" title="Download">
                     <Download className="w-3 h-3" />
                   </button>
                   {!isView && (
@@ -1138,6 +1160,20 @@ export default function BillFormPage() {
             <p className="text-sm text-muted-foreground">Nenhum anexo adicionado.</p>
           )}
         </fieldset>
+
+        {/* Attachment Preview Dialog */}
+        <Dialog open={previewOpen} onOpenChange={() => { setPreviewOpen(false); if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(""); }}>
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>{previewName}</DialogTitle></DialogHeader>
+            {previewType.startsWith("image/") ? (
+              <img src={previewUrl} alt={previewName} className="max-w-full max-h-[70vh] object-contain mx-auto" />
+            ) : previewType === "application/pdf" ? (
+              <iframe src={previewUrl} className="w-full h-[70vh]" title={previewName} />
+            ) : (
+              <p className="text-sm text-muted-foreground py-8 text-center">Visualização não disponível para este tipo de arquivo. Use o botão de download.</p>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Buttons */}
         <div className="flex gap-3">
