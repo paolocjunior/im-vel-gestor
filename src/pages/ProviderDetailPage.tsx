@@ -125,7 +125,7 @@ export default function ProviderDetailPage() {
             {contracts.map((c, i) => (
               <div key={c.id} className="border rounded-lg p-5 space-y-3">
                 <div className="flex justify-between items-start">
-                  <h3 className="font-bold text-base">Contrato {i + 1}</h3>
+                  <h3 className="font-bold text-base">Contrato {i + 1} - {c.service}</h3>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="sm"
                       onClick={() => navigate(`/studies/${studyId}/providers/${providerId}/edit?tab=contracts&contractId=${c.id}`)}>
