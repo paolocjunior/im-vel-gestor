@@ -557,6 +557,17 @@ export default function ProviderFormPage() {
                       <span>Status: {c.status === "ACTIVE" ? "Ativo" : "Finalizado"}</span>
                     </div>
                     {c.details && <p className="text-sm whitespace-pre-line">{c.details}</p>}
+                    {(() => {
+                      const paid = payments
+                        .filter(p => !p._deleted && p.contract_id === c.id && p.status === "PAID")
+                        .reduce((sum, p) => sum + p.amount, 0);
+                      const pending = Math.max(0, c.amount - paid);
+                      return (
+                        <p className="text-sm font-semibold text-destructive">
+                          Pagamento Pendente: {pending.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </p>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
