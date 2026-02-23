@@ -13,6 +13,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import BudgetDrawer from "./BudgetDrawer";
 
 /* ─── types ─── */
 interface Stage {
@@ -99,6 +100,8 @@ export default function BudgetView({ studyId }: Props) {
 
   // expand rows
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
 
   const isDark = document.documentElement.classList.contains("dark");
   const summaryBg = isDark ? "hsl(180, 28%, 12%)" : "hsl(180, 28%, 88%)";
@@ -409,9 +412,9 @@ export default function BudgetView({ studyId }: Props) {
                     <TableRow
                       key={stage.id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => stageProposals.length > 0 && toggleExpand(stage.id)}
+                      onClick={() => { setSelectedStageId(stage.id); setDrawerOpen(true); }}
                     >
-                      <TableCell className="px-2">
+                      <TableCell className="px-2" onClick={e => { e.stopPropagation(); if (stageProposals.length > 0) toggleExpand(stage.id); }}>
                         {stageProposals.length > 0 ? (
                           isExpanded
                             ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -497,6 +500,26 @@ export default function BudgetView({ studyId }: Props) {
         <span>{filteredLeaves.length} itens exibidos</span>
         <span>Total de referência: R$ {fmt(kpis.refTotal)}</span>
       </div>
+
+      {/* Drawer */}
+      {selectedStageId && (() => {
+        const selStage = leafStages.find(s => s.id === selectedStageId);
+        const selQi = selStage ? qiByStage[selStage.id] : null;
+        const selProposals = selQi ? (proposalsByQi[selQi.id] || []) : [];
+        const selUnitAbbr = selStage?.unit_id ? unitMap[selStage.unit_id] || "" : "";
+        return (
+          <BudgetDrawer
+            open={drawerOpen}
+            onOpenChange={(o) => { setDrawerOpen(o); if (!o) setSelectedStageId(null); }}
+            studyId={studyId}
+            stage={selStage || null}
+            quotationItem={selQi || null}
+            proposals={selProposals}
+            unitAbbr={selUnitAbbr}
+            onDataChanged={fetchData}
+          />
+        );
+      })()}
     </div>
   );
 }
