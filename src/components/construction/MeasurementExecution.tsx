@@ -44,6 +44,7 @@ interface UnitItem {
 
 interface Props {
   studyId: string;
+  onNavigateToBudget?: () => void;
 }
 
 function formatDateShort(d: string | null) {
@@ -108,7 +109,7 @@ const getStatusLabel = (status: string) => {
   }
 };
 
-export default function MeasurementExecution({ studyId }: Props) {
+export default function MeasurementExecution({ studyId, onNavigateToBudget }: Props) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [stages, setStages] = useState<StageRow[]>([]);
@@ -336,9 +337,14 @@ export default function MeasurementExecution({ studyId }: Props) {
 
     switch (action) {
       // Material actions
-      case "orcamento":
-        toast.info("Tela de Orçamento será implementada em breve");
+      case "orcamento": {
+        if (onNavigateToBudget) {
+          onNavigateToBudget();
+        } else {
+          toast.info("Abra a aba 'Orçamento' no menu lateral para gerenciar cotações");
+        }
         break;
+      }
       case "pedido":
         toast.info("Tela de Pedido será implementada em breve");
         break;

@@ -1,19 +1,22 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRNumber } from "@/components/ui/masked-number-input";
 import {
-  DollarSign, CheckCircle2, AlertCircle, ShoppingCart, Package, PackageCheck,
-  Search, Filter, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet, FileText,
+  DollarSign, CheckCircle2, AlertCircle, ShoppingCart, PackageCheck,
+  Search, FileSpreadsheet, FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import BudgetDrawer from "./BudgetDrawer";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 /* ─── types ─── */
 interface Stage {
@@ -79,13 +82,6 @@ const STATUS_COLORS: Record<string, string> = {
   used: "bg-primary/10 text-primary",
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  material: "Material",
-  service: "Serviço",
-  labor: "Mão de Obra",
-  fee: "Taxas",
-};
-
 export default function BudgetView({ studyId }: Props) {
   const [stages, setStages] = useState<Stage[]>([]);
   const [quotationItems, setQuotationItems] = useState<QuotationItem[]>([]);
@@ -95,8 +91,9 @@ export default function BudgetView({ studyId }: Props) {
 
   // filters
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedStageIds, setSelectedStageIds] = useState<Set<string>>(new Set());
+  const [filterApplied, setFilterApplied] = useState(false);
 
   // expand rows
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -187,16 +184,26 @@ export default function BudgetView({ studyId }: Props) {
     return m;
   }, [proposals]);
 
-  // leaf stages = stages with no children
+  // leaf stages = stages with no children AND type = material only
   const leafStages = useMemo(() => {
-    const parentIds = new Set(stages.filter(s => s.parent_id).map(s => s.parent_id!));
-    // stages that are NOT parents of any other stage
-    const stageIds = new Set(stages.map(s => s.id));
     return stages.filter(s => {
-      // check if any other stage has this as parent
-      return !stages.some(other => other.parent_id === s.id);
+      const hasChildren = stages.some(other => other.parent_id === s.id);
+      return !hasChildren && s.stage_type === "material";
     });
   }, [stages]);
+
+  // all stage options for filter popover
+  const allStageOptions = useMemo(() => {
+    return leafStages.map(s => ({ id: s.id, label: `${s.code} - ${s.name}` }));
+  }, [leafStages]);
+
+  const toggleStageFilter = (id: string) => {
+    setSelectedStageIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   // filtered leaf stages
   const filteredLeaves = useMemo(() => {
@@ -205,7 +212,7 @@ export default function BudgetView({ studyId }: Props) {
         const q = search.toLowerCase();
         if (!s.code.toLowerCase().includes(q) && !s.name.toLowerCase().includes(q)) return false;
       }
-      if (typeFilter !== "all" && s.stage_type !== typeFilter) return false;
+      if (filterApplied && selectedStageIds.size > 0 && !selectedStageIds.has(s.id)) return false;
       if (statusFilter !== "all") {
         const qi = qiByStage[s.id];
         const st = qi?.status || "pending";
@@ -213,7 +220,7 @@ export default function BudgetView({ studyId }: Props) {
       }
       return true;
     });
-  }, [leafStages, search, typeFilter, statusFilter, qiByStage]);
+  }, [leafStages, search, filterApplied, selectedStageIds, statusFilter, qiByStage]);
 
   /* ─── KPIs ─── */
   const kpis = useMemo(() => {
@@ -229,7 +236,6 @@ export default function BudgetView({ studyId }: Props) {
       const status = qi?.status || "pending";
 
       if (status === "approved" || status === "ordered" || status === "received" || status === "used") {
-        // find winner proposal
         if (qi) {
           const qiProposals = proposalsByQi[qi.id] || [];
           const winner = qiProposals.find(p => p.is_winner);
@@ -279,13 +285,13 @@ export default function BudgetView({ studyId }: Props) {
     if (qiProposals.length === 0) return null;
     const winner = qiProposals.find(p => p.is_winner);
     if (winner) return winner;
-    // fallback: cheapest
     return qiProposals.reduce((min, p) => (p.unit_price < min.unit_price ? p : min), qiProposals[0]);
   };
 
   const clearFilters = () => {
     setSearch("");
-    setTypeFilter("all");
+    setSelectedStageIds(new Set());
+    setFilterApplied(false);
     setStatusFilter("all");
   };
 
@@ -298,7 +304,6 @@ export default function BudgetView({ studyId }: Props) {
       return {
         "Código": stage.code,
         "Etapa": stage.name,
-        "Tipo": stage.stage_type ? TYPE_LABELS[stage.stage_type] || stage.stage_type : "",
         "Un": stage.unit_id ? unitMap[stage.unit_id] || "" : "",
         "Qtde": stage.quantity,
         "Vlr Ref Unit": stage.unit_price,
@@ -392,18 +397,25 @@ export default function BudgetView({ studyId }: Props) {
           />
         </div>
 
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[140px] h-9 text-sm">
-            <SelectValue placeholder="Tipo" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os tipos</SelectItem>
-            <SelectItem value="material">Material</SelectItem>
-            <SelectItem value="service">Serviço</SelectItem>
-            <SelectItem value="labor">Mão de Obra</SelectItem>
-            <SelectItem value="fee">Taxas</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Stage selector popover (like MeasurementExecution) */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9 text-sm">
+              Etapas {selectedStageIds.size > 0 && `(${selectedStageIds.size})`} ▼
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 max-h-60 overflow-y-auto p-2" align="start">
+            {allStageOptions.map(opt => (
+              <label key={opt.id} className="flex items-center gap-2 py-1 px-1 hover:bg-muted rounded cursor-pointer text-sm">
+                <Checkbox checked={selectedStageIds.has(opt.id)} onCheckedChange={() => toggleStageFilter(opt.id)} />
+                <span className="truncate">{opt.label}</span>
+              </label>
+            ))}
+            {allStageOptions.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-2">Nenhuma etapa de material</p>
+            )}
+          </PopoverContent>
+        </Popover>
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[140px] h-9 text-sm">
@@ -420,6 +432,10 @@ export default function BudgetView({ studyId }: Props) {
           </SelectContent>
         </Select>
 
+        {selectedStageIds.size > 0 && !filterApplied && (
+          <Button size="sm" className="h-9 text-sm" onClick={() => setFilterApplied(true)}>Aplicar</Button>
+        )}
+
         <Button variant="outline" size="sm" onClick={clearFilters} className="h-9">
           Limpar
         </Button>
@@ -433,10 +449,6 @@ export default function BudgetView({ studyId }: Props) {
             <FileText className="h-3.5 w-3.5 mr-1.5" />
             PDF
           </Button>
-          <Button variant="outline" size="sm" onClick={fetchData} className="h-9">
-            <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-            Atualizar
-          </Button>
         </div>
       </div>
 
@@ -448,7 +460,6 @@ export default function BudgetView({ studyId }: Props) {
               <TableHead className="w-8" />
               <TableHead className="text-xs">Código</TableHead>
               <TableHead className="text-xs">Etapa</TableHead>
-              <TableHead className="text-xs">Tipo</TableHead>
               <TableHead className="text-xs text-center">Un</TableHead>
               <TableHead className="text-xs text-right">Qtde</TableHead>
               <TableHead className="text-xs text-right">Vlr Ref Unit</TableHead>
@@ -462,8 +473,8 @@ export default function BudgetView({ studyId }: Props) {
           <TableBody>
             {filteredLeaves.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center text-sm text-muted-foreground py-8">
-                  Nenhuma etapa encontrada
+                <TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-8">
+                  Nenhuma etapa de material encontrada
                 </TableCell>
               </TableRow>
             ) : (
@@ -475,9 +486,8 @@ export default function BudgetView({ studyId }: Props) {
                 const stageProposals = qi ? (proposalsByQi[qi.id] || []) : [];
 
                 return (
-                  <>
+                  <Fragment key={stage.id}>
                     <TableRow
-                      key={stage.id}
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => { setSelectedStageId(stage.id); setDrawerOpen(true); }}
                     >
@@ -490,9 +500,6 @@ export default function BudgetView({ studyId }: Props) {
                       </TableCell>
                       <TableCell className="text-xs font-mono">{stage.code}</TableCell>
                       <TableCell className="text-xs max-w-[200px] truncate">{stage.name}</TableCell>
-                      <TableCell className="text-xs">
-                        {stage.stage_type ? TYPE_LABELS[stage.stage_type] || stage.stage_type : "—"}
-                      </TableCell>
                       <TableCell className="text-xs text-center">
                         {stage.unit_id ? unitMap[stage.unit_id] || "—" : "—"}
                       </TableCell>
@@ -533,7 +540,6 @@ export default function BudgetView({ studyId }: Props) {
                           ↳ {p.vendor_name}
                         </TableCell>
                         <TableCell />
-                        <TableCell />
                         <TableCell className="text-xs text-right font-mono text-muted-foreground">
                           R$ {fmt(p.unit_price)}
                         </TableCell>
@@ -554,7 +560,7 @@ export default function BudgetView({ studyId }: Props) {
                         </TableCell>
                       </TableRow>
                     ))}
-                  </>
+                  </Fragment>
                 );
               })
             )}
