@@ -176,6 +176,179 @@ export type Database = {
           },
         ]
       }
+      budget_history: {
+        Row: {
+          action: string
+          created_at: string
+          details: string | null
+          id: string
+          quotation_item_id: string
+          study_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          quotation_item_id: string
+          study_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          quotation_item_id?: string
+          study_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_history_quotation_item_id_fkey"
+            columns: ["quotation_item_id"]
+            isOneToOne: false
+            referencedRelation: "budget_quotation_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_history_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      budget_proposals: {
+        Row: {
+          created_at: string
+          delivery_days: number | null
+          id: string
+          is_deleted: boolean
+          is_winner: boolean
+          notes: string | null
+          proposal_date: string
+          quotation_item_id: string
+          study_id: string
+          total_price: number
+          unit_price: number
+          updated_at: string
+          vendor_id: string
+        }
+        Insert: {
+          created_at?: string
+          delivery_days?: number | null
+          id?: string
+          is_deleted?: boolean
+          is_winner?: boolean
+          notes?: string | null
+          proposal_date?: string
+          quotation_item_id: string
+          study_id: string
+          total_price?: number
+          unit_price?: number
+          updated_at?: string
+          vendor_id: string
+        }
+        Update: {
+          created_at?: string
+          delivery_days?: number | null
+          id?: string
+          is_deleted?: boolean
+          is_winner?: boolean
+          notes?: string | null
+          proposal_date?: string
+          quotation_item_id?: string
+          study_id?: string
+          total_price?: number
+          unit_price?: number
+          updated_at?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_proposals_quotation_item_id_fkey"
+            columns: ["quotation_item_id"]
+            isOneToOne: false
+            referencedRelation: "budget_quotation_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_proposals_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_proposals_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "study_vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      budget_quotation_items: {
+        Row: {
+          approved_proposal_id: string | null
+          created_at: string
+          id: string
+          is_deleted: boolean
+          need_date: string | null
+          notes: string | null
+          stage_id: string
+          status: string
+          study_id: string
+          updated_at: string
+        }
+        Insert: {
+          approved_proposal_id?: string | null
+          created_at?: string
+          id?: string
+          is_deleted?: boolean
+          need_date?: string | null
+          notes?: string | null
+          stage_id: string
+          status?: string
+          study_id: string
+          updated_at?: string
+        }
+        Update: {
+          approved_proposal_id?: string | null
+          created_at?: string
+          id?: string
+          is_deleted?: boolean
+          need_date?: string | null
+          notes?: string | null
+          stage_id?: string
+          status?: string
+          study_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_quotation_items_approved_proposal_id_fkey"
+            columns: ["approved_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "budget_proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_quotation_items_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "construction_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_quotation_items_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       construction_measurements: {
         Row: {
           contract_id: string | null
