@@ -270,27 +270,33 @@ export default function BillFormPage() {
       return;
     }
     setUploading(true);
-    await uploadFilesToBill(targetBillId, Array.from(files));
+    let successCount = 0;
+    let failCount = 0;
+    for (const file of Array.from(files)) {
+      const ok = await uploadSingleFile(targetBillId, file);
+      if (ok) successCount++; else failCount++;
+    }
     setUploading(false);
-    loadAttachments();
-    toast.success("Arquivo(s) anexado(s)!");
+    await loadAttachments();
+    if (successCount > 0) toast.success(`${successCount} arquivo(s) anexado(s)!`);
+    if (failCount > 0) toast.error(`${failCount} arquivo(s) falharam.`);
   };
 
-  const uploadFilesToBill = async (targetBillId: string, files: File[]) => {
-    for (const file of files) {
-      const path = `${studyId}/${targetBillId}/${Date.now()}_${file.name}`;
-      const { error: uploadErr } = await supabase.storage.from("documents").upload(path, file);
-      if (uploadErr) { toast.error(`Erro ao enviar ${file.name}`); continue; }
-      await supabase.from("documents").insert({
-        study_id: studyId!,
-        entity: "bill",
-        entity_id: targetBillId,
-        file_name: file.name,
-        file_path: path,
-        file_size: file.size,
-        mime_type: file.type || null,
-      });
-    }
+  const uploadSingleFile = async (targetBillId: string, file: File): Promise<boolean> => {
+    const path = `${studyId}/${targetBillId}/${Date.now()}_${file.name}`;
+    const { error: uploadErr } = await supabase.storage.from("documents").upload(path, file);
+    if (uploadErr) { toast.error(`Erro ao enviar ${file.name}: ${uploadErr.message}`); return false; }
+    const { error: insertErr } = await supabase.from("documents").insert({
+      study_id: studyId!,
+      entity: "bill",
+      entity_id: targetBillId,
+      file_name: file.name,
+      file_path: path,
+      file_size: file.size,
+      mime_type: file.type || null,
+    });
+    if (insertErr) { toast.error(`Erro ao registrar ${file.name}: ${insertErr.message}`); return false; }
+    return true;
   };
 
   const handleDeleteAttachment = async (doc: typeof attachments[0]) => {
@@ -783,7 +789,9 @@ export default function BillFormPage() {
 
     // Upload pending attachments
     if (pendingFiles.length > 0) {
-      await uploadFilesToBill(newBill.id, pendingFiles);
+      for (const file of pendingFiles) {
+        await uploadSingleFile(newBill.id, file);
+      }
       setPendingFiles([]);
     }
 
