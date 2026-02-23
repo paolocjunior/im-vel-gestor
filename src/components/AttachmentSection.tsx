@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Paperclip, Upload, X, Download, ChevronDown, ChevronRight, Eye } from "lucide-react";
+import { Paperclip, Upload, X, Download, ChevronDown, ChevronRight, Eye, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import PdfPreview from "@/components/PdfPreview";
@@ -98,6 +98,7 @@ export default function AttachmentSection({ studyId, entity, entityId, compact =
     setPreviewOpen(false);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl("");
+    setZoomLevel(1);
   };
 
   const handleDelete = async (doc: AttachmentDoc) => {
@@ -111,9 +112,32 @@ export default function AttachmentSection({ studyId, entity, entityId, compact =
     return mime.startsWith("image/") || mime === "application/pdf";
   };
 
+  const [zoomLevel, setZoomLevel] = useState(1);
+
   const renderPreviewContent = () => {
     if (previewType.startsWith("image/")) {
-      return <img src={previewUrl} alt={previewName} className="max-w-full max-h-[70vh] object-contain mx-auto" />;
+      return (
+        <div className="flex flex-col items-center gap-3">
+          <div className="overflow-auto max-h-[65vh] max-w-full">
+            <img
+              src={previewUrl}
+              alt={previewName}
+              className="object-contain mx-auto transition-transform"
+              style={{ transform: `scale(${zoomLevel})`, transformOrigin: "center center" }}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={() => setZoomLevel(z => Math.max(0.25, z - 0.25))}>
+              <ZoomOut className="w-4 h-4" />
+            </Button>
+            <span className="text-sm text-muted-foreground w-16 text-center">{Math.round(zoomLevel * 100)}%</span>
+            <Button variant="outline" size="icon" onClick={() => setZoomLevel(z => Math.min(4, z + 0.25))}>
+              <ZoomIn className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setZoomLevel(1)}>Reset</Button>
+          </div>
+        </div>
+      );
     }
     if (previewType === "application/pdf") {
       return <PdfPreview fileUrl={previewUrl} fileName={previewName} />;
