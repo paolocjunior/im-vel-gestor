@@ -550,21 +550,21 @@ export default function ProviderFormPage() {
                         </Button>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-muted-foreground">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-muted-foreground items-start">
                       <span>Início: {c.start_date ? c.start_date.split("-").reverse().join("/") : "—"}</span>
                       <span>Fim: {c.end_date ? c.end_date.split("-").reverse().join("/") : "—"}</span>
-                      <span>Valor: {c.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
+                      <div>
+                        <div>Valor: {c.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</div>
+                        <div className="mt-1 text-destructive font-semibold">
+                          Pendente: {Math.max(0, c.amount - payments
+                            .filter(p => !p._deleted && p.contract_id === c.id && p.status === "PAID")
+                            .reduce((sum, p) => sum + p.amount, 0))
+                            .toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </div>
+                      </div>
                       <span>Status: {c.status === "ACTIVE" ? "Ativo" : "Finalizado"}</span>
                     </div>
                     {c.details && <p className="text-sm whitespace-pre-line">{c.details}</p>}
-                    <p className="text-sm font-semibold text-destructive">
-                      Pagamento Pendente: {(() => {
-                        const paid = payments
-                          .filter(p => !p._deleted && p.contract_id === c.id && p.status === "PAID")
-                          .reduce((sum, p) => sum + p.amount, 0);
-                        return Math.max(0, c.amount - paid).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-                      })()}
-                    </p>
                   </div>
                 ))}
               </div>
