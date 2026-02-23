@@ -490,8 +490,19 @@ export default function BillFormPage() {
     if (installmentPlan !== "AVISTA" && installments.length > 0) {
       const baseDate = firstDueDate || todayISO();
       setInstallments(prev => prev.map((row, i) => {
-        if (row._status === "PAID") return row; // Don't change paid installment dates
+        if (row._status === "PAID") return row;
         return { ...row, due_date: addDaysISO(baseDate, newInterval * (i + 1)) };
+      }));
+    }
+  };
+
+  const handleFirstDueDateChange = (newDate: string) => {
+    setFirstDueDate(newDate);
+    if (installmentPlan !== "AVISTA" && installments.length > 0 && newDate) {
+      const interval = typeof intervalDays === "number" ? intervalDays : 30;
+      setInstallments(prev => prev.map((row, i) => {
+        if (row._status === "PAID") return row;
+        return { ...row, due_date: addDaysISO(newDate, interval * (i + 1)) };
       }));
     }
   };
@@ -951,7 +962,7 @@ export default function BillFormPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>1° Vencimento:</Label>
-                  <Input type="date" value={firstDueDate} onChange={e => setFirstDueDate(e.target.value)} disabled={isView || !billType} />
+                  <Input type="date" value={firstDueDate} onChange={e => handleFirstDueDateChange(e.target.value)} disabled={isView || !billType} />
                 </div>
                 {installmentPlan !== "AVISTA" && billType === "compras" && (
                   <div className="space-y-1.5">
