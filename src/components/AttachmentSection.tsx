@@ -48,11 +48,14 @@ export default function AttachmentSection({ studyId, entity, entityId, compact =
     setAttachments(data || []);
   };
 
+  const sanitizeFileName = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, "_");
+
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploading(true);
     for (const file of Array.from(files)) {
-      const path = `${studyId}/${entity}/${effectiveEntityId}/${Date.now()}_${file.name}`;
+      const safeName = sanitizeFileName(file.name);
+      const path = `${studyId}/${entity}/${effectiveEntityId}/${Date.now()}_${safeName}`;
       const { error: uploadErr } = await supabase.storage.from("documents").upload(path, file);
       if (uploadErr) { toast.error(`Erro ao enviar ${file.name}`); continue; }
       await supabase.from("documents").insert({
