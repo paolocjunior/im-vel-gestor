@@ -17,9 +17,11 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Trash2, Plus, ArrowLeft, Loader2 } from "lucide-react";
+import { Trash2, Plus, ArrowLeft, Loader2, FileText, FileSpreadsheet } from "lucide-react";
 import { formatCPFCNPJ, formatPhone, formatCNPJ } from "@/lib/cnpjLookup";
-// lookupCNPJ will be used in Phase 2
+import { quotationPdfBlob, downloadQuotationPdf } from "@/lib/quotationPdf";
+import { downloadQuotationExcel } from "@/lib/quotationExcel";
+import PdfPreview from "@/components/PdfPreview";
 
 interface StageItem {
   stage_id: string;
@@ -84,6 +86,7 @@ export default function QuotationRequestPage() {
   const [quotationNumber, setQuotationNumber] = useState(1);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
 
   // Add stage dialog
   const [addStageOpen, setAddStageOpen] = useState(false);
@@ -252,6 +255,31 @@ export default function QuotationRequestPage() {
       navigate(`/studies/${studyId}/construction`);
     }
     setSaving(false);
+  };
+
+  /* ─── Build params for PDF / Excel ─── */
+  const buildExportParams = () => ({
+    quotationNumber,
+    profile: profile!,
+    vendor: vendorId ? vendors.find(v => v.id === vendorId) || null : null,
+    vendorEmail,
+    items,
+    message,
+  });
+
+  /* ─── PDF Preview ─── */
+  const handlePreviewPdf = () => {
+    if (items.length === 0) { toast.error("Adicione pelo menos um item"); return; }
+    const blob = quotationPdfBlob(buildExportParams());
+    const url = URL.createObjectURL(blob);
+    setPdfPreviewUrl(url);
+  };
+
+  /* ─── Excel Download ─── */
+  const handleDownloadExcel = () => {
+    if (items.length === 0) { toast.error("Adicione pelo menos um item"); return; }
+    downloadQuotationExcel(buildExportParams());
+    toast.success("Excel gerado com sucesso");
   };
 
   /* ─── Format helpers ─── */
@@ -445,11 +473,11 @@ export default function QuotationRequestPage() {
 
         {/* Footer */}
         <div className="flex flex-wrap items-center gap-3 pt-2 border-t">
-          <Button variant="outline" size="sm" disabled className="text-xs">
-            Pré-visualizar PDF
+          <Button variant="outline" size="sm" className="text-xs" onClick={handlePreviewPdf} disabled={items.length === 0}>
+            <FileText className="h-3.5 w-3.5 mr-1" /> Pré-visualizar PDF
           </Button>
-          <Button variant="outline" size="sm" disabled className="text-xs">
-            Pré-visualizar Excel
+          <Button variant="outline" size="sm" className="text-xs" onClick={handleDownloadExcel} disabled={items.length === 0}>
+            <FileSpreadsheet className="h-3.5 w-3.5 mr-1" /> Baixar Excel
           </Button>
           <Button variant="secondary" size="sm" onClick={handleSaveDraft} disabled={saving} className="text-xs">
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
@@ -516,6 +544,21 @@ export default function QuotationRequestPage() {
               Salvar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* PDF Preview Dialog */}
+      <Dialog open={!!pdfPreviewUrl} onOpenChange={(open) => { if (!open) { if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); } }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base">Pré-visualização do PDF</DialogTitle>
+          </DialogHeader>
+          {pdfPreviewUrl && (
+            <PdfPreview
+              fileUrl={pdfPreviewUrl}
+              fileName={`cotacao-${String(quotationNumber).padStart(3, "0")}.pdf`}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>
