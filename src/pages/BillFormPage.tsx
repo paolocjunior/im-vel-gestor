@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Paperclip, Upload, X, Download } from "lucide-react";
+import PdfPreview from "@/components/PdfPreview";
 import { MonthRangePicker } from "@/components/MonthRangePicker";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
@@ -1179,9 +1180,7 @@ export default function BillFormPage() {
             {previewType.startsWith("image/") ? (
               <img src={previewUrl} alt={previewName} className="max-w-full max-h-[70vh] object-contain mx-auto" />
             ) : previewType === "application/pdf" ? (
-              <object data={previewUrl} type="application/pdf" className="w-full h-[70vh]">
-                <p className="text-sm text-muted-foreground py-8 text-center">Não foi possível exibir o PDF. <a href={previewUrl} download={previewName} className="text-primary underline">Clique aqui para baixar</a>.</p>
-              </object>
+              <PdfPreview fileUrl={previewUrl} fileName={previewName} />
             ) : (
               <p className="text-sm text-muted-foreground py-8 text-center">Visualização não disponível para este tipo de arquivo. Use o botão de download.</p>
             )}
