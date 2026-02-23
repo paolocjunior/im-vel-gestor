@@ -88,9 +88,9 @@ const STATUS_LABELS: Record<string, string> = {
 
 const TYPE_LABELS: Record<string, string> = {
   material: "Material",
-  service: "Serviço",
-  labor: "Mão de Obra",
-  fee: "Taxas",
+  servico: "Serviço",
+  mao_de_obra: "Mão de Obra",
+  taxas: "Taxas",
 };
 
 export default function BudgetDrawer({
@@ -224,6 +224,11 @@ export default function BudgetDrawer({
       .update({ status: "approved", approved_proposal_id: proposalId })
       .eq("id", qiId);
 
+    // sync construction_stages.status
+    await supabase.from("construction_stages" as any)
+      .update({ status: "orcamento" })
+      .eq("id", stage.id);
+
     // log
     const proposal = proposals.find(p => p.id === proposalId);
     await supabase.from("budget_history" as any).insert({
@@ -251,6 +256,11 @@ export default function BudgetDrawer({
     await supabase.from("budget_quotation_items" as any)
       .update({ status: "quoting", approved_proposal_id: null })
       .eq("id", quotationItem.id);
+
+    // sync construction_stages.status back to pending
+    await supabase.from("construction_stages" as any)
+      .update({ status: "pending" })
+      .eq("id", stage.id);
 
     await supabase.from("budget_history" as any).insert({
       quotation_item_id: quotationItem.id,
@@ -298,6 +308,11 @@ export default function BudgetDrawer({
     await supabase.from("budget_quotation_items" as any)
       .update({ status: "ordered" })
       .eq("id", quotationItem.id);
+
+    // sync construction_stages.status
+    await supabase.from("construction_stages" as any)
+      .update({ status: "pedido" })
+      .eq("id", stage.id);
 
     // log
     await supabase.from("budget_history" as any).insert({

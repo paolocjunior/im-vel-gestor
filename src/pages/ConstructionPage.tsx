@@ -114,7 +114,7 @@ export default function ConstructionPage() {
           />
         );
       case "measurement":
-        return <MeasurementExecution studyId={studyId} />;
+        return <MeasurementExecution studyId={studyId} onNavigateToBudget={() => setActiveView("budget")} />;
       case "physical-financial":
         return <PhysicalFinancialSchedule studyId={studyId} />;
       case "gantt":
