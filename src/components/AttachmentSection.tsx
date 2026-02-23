@@ -99,6 +99,7 @@ export default function AttachmentSection({ studyId, entity, entityId, compact =
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl("");
     setZoomLevel(1);
+    setImgNatural(null);
   };
 
   const handleDelete = async (doc: AttachmentDoc) => {
@@ -113,9 +114,13 @@ export default function AttachmentSection({ studyId, entity, entityId, compact =
   };
 
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [imgNatural, setImgNatural] = useState<{ w: number; h: number } | null>(null);
+
+  const baseWidth = imgNatural ? Math.min(imgNatural.w, 700) : 700;
 
   const renderPreviewContent = () => {
     if (previewType.startsWith("image/")) {
+      const displayWidth = baseWidth * zoomLevel;
       return (
         <div className="flex flex-col gap-3">
           <div className="overflow-auto max-h-[65vh] max-w-full">
@@ -123,7 +128,11 @@ export default function AttachmentSection({ studyId, entity, entityId, compact =
               src={previewUrl}
               alt={previewName}
               className="block"
-              style={{ width: `${zoomLevel * 100}%`, height: "auto" }}
+              style={{ width: `${displayWidth}px`, height: "auto", maxWidth: "none" }}
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                setImgNatural({ w: img.naturalWidth, h: img.naturalHeight });
+              }}
             />
           </div>
           <div className="flex items-center justify-center gap-2">
