@@ -83,7 +83,7 @@ export function MonthRangePicker({ value, onChange, disabled }: MonthRangePicker
     if (!value) return "Selecione...";
     const s = value.start;
     const e = value.end;
-    return `${MONTHS_PT[s.month - 1]}/${String(s.year).slice(2)} a ${MONTHS_PT[e.month - 1]}/${String(e.year).slice(2)}`;
+    return `${String(s.month).padStart(2, "0")}/${s.year} a ${String(e.month).padStart(2, "0")}/${e.year}`;
   };
 
   return (

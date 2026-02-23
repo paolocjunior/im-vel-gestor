@@ -72,7 +72,7 @@ export function generateMonthColumns(minDate: string, maxDate: string): MonthCol
     const end = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
     cols.push({
       key: `${y}-${String(m).padStart(2, "0")}`,
-      label: `${MONTHS_PT[m - 1]}/${y}`,
+      label: `${String(m).padStart(2, "0")}/${y}`,
       year: y,
       month: m,
       start,
@@ -94,8 +94,8 @@ export function groupColumns(monthCols: MonthColumn[], granularity: Granularity)
     // For biweekly, each month gets 2 columns: 1-15 and 16-end
     const result: { key: string; label: string; monthKeys: string[] }[] = [];
     for (const c of monthCols) {
-      result.push({ key: `${c.key}-Q1`, label: `${MONTHS_PT[c.month - 1]} 1Q/${c.year}`, monthKeys: [c.key] });
-      result.push({ key: `${c.key}-Q2`, label: `${MONTHS_PT[c.month - 1]} 2Q/${c.year}`, monthKeys: [c.key] });
+      result.push({ key: `${c.key}-Q1`, label: `${String(c.month).padStart(2, "0")}/${c.year} 1Q`, monthKeys: [c.key] });
+      result.push({ key: `${c.key}-Q2`, label: `${String(c.month).padStart(2, "0")}/${c.year} 2Q`, monthKeys: [c.key] });
     }
     return result;
   }
@@ -110,7 +110,7 @@ export function groupColumns(monthCols: MonthColumn[], granularity: Granularity)
     const last = chunk[chunk.length - 1];
     const label = chunk.length === 1
       ? first.label
-      : `${MONTHS_PT[first.month - 1]}/${first.year} - ${MONTHS_PT[last.month - 1]}/${last.year}`;
+      : `${String(first.month).padStart(2, "0")}/${first.year} - ${String(last.month).padStart(2, "0")}/${last.year}`;
     groups.push({
       key: `${first.key}_${last.key}`,
       label,

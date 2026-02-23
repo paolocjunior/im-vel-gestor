@@ -48,10 +48,8 @@ interface Props {
 
 function formatDateShort(d: string | null) {
   if (!d) return "";
-  const date = new Date(d + "T12:00:00");
-  const day = String(date.getDate()).padStart(2, "0");
-  const months = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-  return `${day}/${months[date.getMonth()]}`;
+  const [, m, day] = d.split("-");
+  return `${day}/${m}`;
 }
 
 function getStageTypeLabel(type: string | null): string {
