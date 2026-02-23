@@ -12,6 +12,7 @@ import ConstructionStages from "@/components/construction/ConstructionStages";
 import GanttChart from "@/components/construction/GanttChart";
 import PhysicalFinancialSchedule from "@/components/construction/PhysicalFinancialSchedule";
 import MeasurementExecution from "@/components/construction/MeasurementExecution";
+import BudgetView from "@/components/construction/BudgetView";
 
 type ViewType = "dashboard" | "stages" | "measurement" | "budget" | "purchase-orders" | "purchases" | "financial" | "reports" | "gantt" | "physical-financial";
 
@@ -118,6 +119,8 @@ export default function ConstructionPage() {
         return <PhysicalFinancialSchedule studyId={studyId} />;
       case "gantt":
         return <GanttChart studyId={studyId} />;
+      case "budget":
+        return <BudgetView studyId={studyId} />;
       default:
         return (
           <div className="flex items-center justify-center h-64">
@@ -127,7 +130,7 @@ export default function ConstructionPage() {
     }
   }
 
-  const isFullWidthView = activeView === "physical-financial" || activeView === "gantt" || activeView === "stages" || activeView === "measurement";
+  const isFullWidthView = activeView === "physical-financial" || activeView === "gantt" || activeView === "stages" || activeView === "measurement" || activeView === "budget";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
