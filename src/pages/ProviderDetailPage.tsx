@@ -143,11 +143,11 @@ export default function ProviderDetailPage() {
                   </div>
                   <div>
                     <p className="text-muted-foreground">Data Inicial</p>
-                    <p className="font-medium">{c.start_date}</p>
+                    <p className="font-medium">{c.start_date.split("-").reverse().join("/")}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Data Final</p>
-                    <p className="font-medium">{c.end_date || "—"}</p>
+                    <p className="font-medium">{c.end_date ? c.end_date.split("-").reverse().join("/") : "—"}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Modelo de Cobrança</p>
