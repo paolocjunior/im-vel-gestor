@@ -282,8 +282,11 @@ export default function BillFormPage() {
     if (failCount > 0) toast.error(`${failCount} arquivo(s) falharam.`);
   };
 
+  const sanitizeFileName = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, "_");
+
   const uploadSingleFile = async (targetBillId: string, file: File): Promise<boolean> => {
-    const path = `${studyId}/${targetBillId}/${Date.now()}_${file.name}`;
+    const safeName = sanitizeFileName(file.name);
+    const path = `${studyId}/${targetBillId}/${Date.now()}_${safeName}`;
     const { error: uploadErr } = await supabase.storage.from("documents").upload(path, file);
     if (uploadErr) { toast.error(`Erro ao enviar ${file.name}: ${uploadErr.message}`, { duration: 10000 }); console.error("Upload error:", uploadErr); return false; }
     const { error: insertErr } = await supabase.from("documents").insert({
