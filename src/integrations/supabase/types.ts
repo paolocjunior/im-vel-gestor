@@ -775,6 +775,7 @@ export type Database = {
           neighborhood: string | null
           person_type: string
           phone: string | null
+          quotation_default_message: string | null
           state: string | null
           street: string | null
           street_number: string | null
@@ -801,6 +802,7 @@ export type Database = {
           neighborhood?: string | null
           person_type?: string
           phone?: string | null
+          quotation_default_message?: string | null
           state?: string | null
           street?: string | null
           street_number?: string | null
@@ -827,6 +829,7 @@ export type Database = {
           neighborhood?: string | null
           person_type?: string
           phone?: string | null
+          quotation_default_message?: string | null
           state?: string | null
           street?: string | null
           street_number?: string | null

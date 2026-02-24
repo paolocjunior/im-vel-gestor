@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN quotation_default_message text;
