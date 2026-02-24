@@ -721,6 +721,67 @@ export type Database = {
           },
         ]
       }
+      email_send_log: {
+        Row: {
+          created_at: string
+          error_code: string | null
+          event_type: string
+          id: string
+          meta: Json | null
+          provider_message_id: string | null
+          request_id: string
+          study_id: string
+          user_id: string
+          vendor_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_code?: string | null
+          event_type: string
+          id?: string
+          meta?: Json | null
+          provider_message_id?: string | null
+          request_id: string
+          study_id: string
+          user_id: string
+          vendor_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_code?: string | null
+          event_type?: string
+          id?: string
+          meta?: Json | null
+          provider_message_id?: string | null
+          request_id?: string
+          study_id?: string
+          user_id?: string
+          vendor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_send_log_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "quotation_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_send_log_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_send_log_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "study_vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       financial_institutions: {
         Row: {
           created_at: string
@@ -986,11 +1047,16 @@ export type Database = {
       }
       quotation_requests: {
         Row: {
+          attempt_count: number
           created_at: string
+          error_code: string | null
           id: string
+          last_attempt_at: string | null
           message: string | null
+          provider_message_id: string | null
           quotation_number: number
           request_type: string
+          send_key: string | null
           sent_at: string | null
           status: string
           study_id: string
@@ -999,11 +1065,16 @@ export type Database = {
           vendor_id: string | null
         }
         Insert: {
+          attempt_count?: number
           created_at?: string
+          error_code?: string | null
           id?: string
+          last_attempt_at?: string | null
           message?: string | null
+          provider_message_id?: string | null
           quotation_number?: number
           request_type?: string
+          send_key?: string | null
           sent_at?: string | null
           status?: string
           study_id: string
@@ -1012,11 +1083,16 @@ export type Database = {
           vendor_id?: string | null
         }
         Update: {
+          attempt_count?: number
           created_at?: string
+          error_code?: string | null
           id?: string
+          last_attempt_at?: string | null
           message?: string | null
+          provider_message_id?: string | null
           quotation_number?: number
           request_type?: string
+          send_key?: string | null
           sent_at?: string | null
           status?: string
           study_id?: string
@@ -1785,9 +1861,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      finalize_quotation_email_send: {
+        Args: {
+          p_error_code?: string
+          p_message_hash?: string
+          p_message_len?: number
+          p_outcome: string
+          p_provider_http_status?: number
+          p_provider_latency_ms?: number
+          p_provider_message_id?: string
+          p_request_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       is_profile_complete: { Args: never; Returns: boolean }
+      lock_key_uuid: {
+        Args: { p_id: string; p_prefix: string }
+        Returns: number
+      }
       owns_order: { Args: { p_order_id: string }; Returns: boolean }
       owns_study: { Args: { p_study_id: string }; Returns: boolean }
+      reserve_quotation_email_send: {
+        Args: { p_request_id: string; p_user_id: string }
+        Returns: Json
+      }
       soft_delete_study: { Args: { p_study_id: string }; Returns: undefined }
       sync_pv_monthly: {
         Args: { p_rows: Json; p_study_id: string }
