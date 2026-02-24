@@ -92,6 +92,7 @@ export default function QuotationRequestPage() {
   const [savedDefaultMessage, setSavedDefaultMessage] = useState(DEFAULT_MESSAGE);
   const [quotationNumber, setQuotationNumber] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [editDefaultMessageOpen, setEditDefaultMessageOpen] = useState(false);
@@ -320,6 +321,81 @@ export default function QuotationRequestPage() {
       navigate(`/studies/${studyId}/construction`);
     }
     setSaving(false);
+  };
+
+  /* ─── Send email (saves draft first, then invokes edge function) ─── */
+  const handleSendEmail = async () => {
+    if (items.length === 0) { toast.error("Adicione pelo menos um item"); return; }
+    if (requestType === "email" && !vendorEmail) { toast.error("E-mail do fornecedor é obrigatório"); return; }
+    setSending(true);
+
+    // 1. Save draft first
+    const { data: req, error: reqErr } = await supabase
+      .from("quotation_requests" as any)
+      .insert({
+        study_id: studyId!,
+        vendor_id: vendorId || null,
+        vendor_email: vendorEmail || null,
+        request_type: requestType,
+        status: "draft",
+        message: message || null,
+      })
+      .select("id, quotation_number")
+      .single();
+
+    if (reqErr || !req) {
+      toast.error("Erro ao salvar cotação");
+      setSending(false);
+      return;
+    }
+
+    const sendItems = items.map((item, idx) => ({
+      request_id: (req as any).id,
+      stage_id: item.stage_id,
+      observation: item.observation || null,
+      position: idx,
+    }));
+
+    const { error: itemsErr2 } = await supabase
+      .from("quotation_request_items" as any)
+      .insert(sendItems);
+
+    if (itemsErr2) {
+      toast.error("Erro ao salvar itens da cotação");
+      setSending(false);
+      return;
+    }
+
+    // 2. Invoke edge function with minimal payload
+    const { data: fnData, error: fnError } = await supabase.functions.invoke(
+      "send-quotation-email",
+      { body: { request_id: (req as any).id } }
+    );
+
+    setSending(false);
+
+    if (fnError) {
+      console.error("Edge function error:", fnError);
+      toast.error("Erro ao enviar e-mail. Tente novamente.");
+      return;
+    }
+
+    if (fnData?.ok) {
+      if (fnData.alreadySent) {
+        toast.info("E-mail já foi enviado anteriormente");
+      } else {
+        toast.success(`Cotação #${String((req as any).quotation_number).padStart(3, "0")} enviada por e-mail`);
+      }
+      navigate(`/studies/${studyId}/construction`);
+    } else if (fnData?.error === "VENDOR_NO_EMAIL") {
+      toast.error("Fornecedor sem e-mail cadastrado");
+    } else if (fnData?.error === "RATE_LIMIT") {
+      toast.error("Limite de envios atingido. Aguarde alguns minutos.");
+    } else if (fnData?.error === "CONFLICT") {
+      toast.error("Envio já em andamento ou limite de tentativas atingido.");
+    } else {
+      toast.error("Erro ao enviar e-mail. Tente novamente.");
+    }
   };
 
   /* ─── Build params for PDF / Excel ─── */
@@ -562,7 +638,13 @@ export default function QuotationRequestPage() {
             Salvar Rascunho
           </Button>
           <div className="flex-1" />
-          <Button size="sm" disabled className="text-xs">
+          <Button
+            size="sm"
+            className="text-xs"
+            disabled={sending || saving || items.length === 0 || (requestType === "email" && !vendorEmail)}
+            onClick={handleSendEmail}
+          >
+            {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
             Enviar Solicitação
           </Button>
         </div>
