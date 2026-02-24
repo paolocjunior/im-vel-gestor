@@ -46,6 +46,7 @@ interface Profile {
   person_type: string;
   cpf_cnpj: string | null;
   inscricao_estadual: string | null;
+  quotation_default_message: string | null;
   email: string | null;
   phone: string | null;
   street: string | null;
@@ -65,6 +66,11 @@ Solicitamos o envio dos preços unitários e condições de pagamento.
 
 Atenciosamente.`;
 
+const resolveDefaultMessage = (value: string | null | undefined): string => {
+  if (value && value.trim()) return value;
+  return DEFAULT_MESSAGE;
+};
+
 export default function QuotationRequestPage() {
   const { id: studyId } = useParams();
   const [searchParams] = useSearchParams();
@@ -83,10 +89,14 @@ export default function QuotationRequestPage() {
   const [vendorId, setVendorId] = useState("");
   const [vendorEmail, setVendorEmail] = useState("");
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
+  const [savedDefaultMessage, setSavedDefaultMessage] = useState(DEFAULT_MESSAGE);
   const [quotationNumber, setQuotationNumber] = useState(1);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [editDefaultMessageOpen, setEditDefaultMessageOpen] = useState(false);
+  const [defaultMessageDraft, setDefaultMessageDraft] = useState(DEFAULT_MESSAGE);
+  const [savingDefaultMessage, setSavingDefaultMessage] = useState(false);
 
   // Add stage dialog
   const [addStageOpen, setAddStageOpen] = useState(false);
@@ -105,14 +115,21 @@ export default function QuotationRequestPage() {
     setLoading(true);
 
     const [profileRes, vendorsRes, stagesRes, unitsRes, countRes] = await Promise.all([
-      supabase.from("profiles").select("full_name, person_type, cpf_cnpj, inscricao_estadual, email, phone, street, street_number, complement, neighborhood, city, state, cep").eq("user_id", user.id).single(),
+      supabase.from("profiles").select("full_name, person_type, cpf_cnpj, inscricao_estadual, quotation_default_message, email, phone, street, street_number, complement, neighborhood, city, state, cep").eq("user_id", user.id).single(),
       supabase.from("study_vendors").select("id, nome_fantasia, razao_social, email, cnpj, phone").eq("study_id", studyId).eq("is_deleted", false),
       supabase.from("construction_stages").select("id, code, name, unit_id, quantity, stage_type").eq("study_id", studyId).eq("is_deleted", false).order("position"),
       supabase.from("construction_units").select("id, abbreviation"),
       supabase.from("quotation_requests" as any).select("quotation_number").eq("study_id", studyId).order("quotation_number", { ascending: false }).limit(1),
     ]);
 
-    if (profileRes.data) setProfile(profileRes.data as any);
+    if (profileRes.data) {
+      const loadedProfile = profileRes.data as any;
+      const defaultMsg = resolveDefaultMessage(loadedProfile.quotation_default_message);
+      setProfile(loadedProfile);
+      setSavedDefaultMessage(defaultMsg);
+      setDefaultMessageDraft(defaultMsg);
+      setMessage(defaultMsg);
+    }
     if (vendorsRes.data) setVendors(vendorsRes.data);
 
     // Build unit map
@@ -155,6 +172,54 @@ export default function QuotationRequestPage() {
   }, [studyId, user, stageIdsParam]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const syncMessageFromSavedProfile = useCallback(async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("quotation_default_message")
+      .eq("user_id", user.id)
+      .single();
+
+    if (error) {
+      const fallback = resolveDefaultMessage(savedDefaultMessage);
+      setDefaultMessageDraft(fallback);
+      setMessage(fallback);
+      return;
+    }
+
+    const currentDefault = resolveDefaultMessage((data as any)?.quotation_default_message);
+    setSavedDefaultMessage(currentDefault);
+    setDefaultMessageDraft(currentDefault);
+    setMessage(currentDefault);
+  }, [user, savedDefaultMessage]);
+
+  const handleSaveDefaultMessage = async () => {
+    if (!user) return;
+    const valueToSave = resolveDefaultMessage(defaultMessageDraft);
+    setSavingDefaultMessage(true);
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ quotation_default_message: valueToSave })
+      .eq("user_id", user.id);
+
+    setSavingDefaultMessage(false);
+
+    if (error) {
+      toast.error("Erro ao salvar mensagem padrão");
+      return;
+    }
+
+    toast.success("Mensagem padrão salva");
+    setEditDefaultMessageOpen(false);
+    await syncMessageFromSavedProfile();
+  };
+
+  const handleBackDefaultMessage = async () => {
+    setEditDefaultMessageOpen(false);
+    await syncMessageFromSavedProfile();
+  };
 
   /* ─── Vendor selection ─── */
   const handleVendorChange = (vid: string) => {
@@ -463,7 +528,20 @@ export default function QuotationRequestPage() {
 
         {/* Mensagem */}
         <div className="rounded-lg border p-4 space-y-2">
-          <h3 className="text-sm font-semibold text-foreground">Mensagem</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-foreground">Mensagem</h3>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() => {
+                setDefaultMessageDraft(savedDefaultMessage);
+                setEditDefaultMessageOpen(true);
+              }}
+            >
+              Editar Mens. Padrão
+            </Button>
+          </div>
           <Textarea
             className="min-h-[120px] text-sm"
             value={message}
@@ -489,6 +567,35 @@ export default function QuotationRequestPage() {
           </Button>
         </div>
       </div>
+
+      {/* Default Message Dialog */}
+      <Dialog
+        open={editDefaultMessageOpen}
+        onOpenChange={(open) => {
+          setEditDefaultMessageOpen(open);
+          if (!open) void syncMessageFromSavedProfile();
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="text-base">Mensagem Padrão</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            className="min-h-[200px] text-sm"
+            value={defaultMessageDraft}
+            onChange={e => setDefaultMessageDraft(e.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => void handleBackDefaultMessage()}>
+              Voltar
+            </Button>
+            <Button size="sm" onClick={handleSaveDefaultMessage} disabled={savingDefaultMessage}>
+              {savingDefaultMessage ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Stage Dialog */}
       <Dialog open={addStageOpen} onOpenChange={setAddStageOpen}>
