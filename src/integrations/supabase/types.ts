@@ -1861,6 +1861,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_stuck_sending: { Args: never; Returns: undefined }
       finalize_quotation_email_send: {
         Args: {
           p_error_code?: string
