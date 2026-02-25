@@ -417,7 +417,15 @@ export default function BudgetView({ studyId }: Props) {
           Limpar
         </Button>
 
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 text-sm"
+            onClick={() => navigate(`/studies/${studyId}/quotation-drafts`)}
+          >
+            Rascunhos
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-9 text-sm">

@@ -25,6 +25,7 @@ import BillsPage from "./pages/BillsPage";
 import BillFormPage from "./pages/BillFormPage";
 import ConstructionPage from "./pages/ConstructionPage";
 import QuotationRequestPage from "./pages/QuotationRequestPage";
+import QuotationDraftsPage from "./pages/QuotationDraftsPage";
 import ProfileCompletionPage from "./pages/ProfileCompletionPage";
 import NotFound from "./pages/NotFound";
 
@@ -63,6 +64,7 @@ const App = () => (
             <Route path="/studies/:id/providers/:providerId/edit" element={<P><ProviderFormPage /></P>} />
             <Route path="/studies/:id/providers/:providerId/view" element={<P><ProviderDetailPage /></P>} />
             <Route path="/studies/:id/construction" element={<P><ConstructionPage /></P>} />
+            <Route path="/studies/:id/quotation-drafts" element={<P><QuotationDraftsPage /></P>} />
             <Route path="/studies/:id/quotation-request" element={<P><QuotationRequestPage /></P>} />
             <Route path="*" element={<NotFound />} />
           </Routes>

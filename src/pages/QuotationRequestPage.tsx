@@ -77,8 +77,10 @@ export default function QuotationRequestPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const requestType = searchParams.get("type") || "email";
+  const initialRequestType = searchParams.get("type") === "manual" ? "manual" : "email";
+  const draftIdParam = searchParams.get("draftId");
   const stageIdsParam = searchParams.get("stages") || "";
+  const [requestType, setRequestType] = useState<"email" | "manual">(initialRequestType);
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -118,7 +120,7 @@ export default function QuotationRequestPage() {
     const [profileRes, vendorsRes, stagesRes, unitsRes, countRes] = await Promise.all([
       supabase.from("profiles").select("full_name, person_type, cpf_cnpj, inscricao_estadual, quotation_default_message, email, phone, street, street_number, complement, neighborhood, city, state, cep").eq("user_id", user.id).single(),
       supabase.from("study_vendors").select("id, nome_fantasia, razao_social, email, cnpj, phone").eq("study_id", studyId).eq("is_deleted", false),
-      supabase.from("construction_stages").select("id, code, name, unit_id, quantity, stage_type").eq("study_id", studyId).eq("is_deleted", false).order("position"),
+      supabase.from("construction_stages").select("id, code, name, unit_id, quantity, stage_type, parent_id").eq("study_id", studyId).eq("is_deleted", false).order("position"),
       supabase.from("construction_units").select("id, abbreviation"),
       supabase.from("quotation_requests" as any).select("quotation_number").eq("study_id", studyId).order("quotation_number", { ascending: false }).limit(1),
     ]);
@@ -140,14 +142,70 @@ export default function QuotationRequestPage() {
     }
     setUnits(unitMap);
 
+    const allStageRows = (stagesRes.data as any[]) || [];
+
     // Filter material stages
-    const materialStages = (stagesRes.data as any[] || []).filter((s: any) => {
-      const hasChildren = (stagesRes.data as any[]).some((o: any) => o.parent_id === s.id);
+    const materialStages = allStageRows.filter((s: any) => {
+      const hasChildren = allStageRows.some((o: any) => o.parent_id === s.id);
       return !hasChildren && s.stage_type === "material";
     });
     setAllStages(materialStages);
+    const stageById = new Map(allStageRows.map((s: any) => [s.id, s]));
+
+    if (draftIdParam) {
+      const [draftRes, draftItemsRes] = await Promise.all([
+        supabase
+          .from("quotation_requests" as any)
+          .select("id, quotation_number, vendor_id, vendor_email, request_type, message, status")
+          .eq("id", draftIdParam)
+          .eq("study_id", studyId)
+          .eq("status", "draft")
+          .single(),
+        supabase
+          .from("quotation_request_items" as any)
+          .select("stage_id, observation, position")
+          .eq("request_id", draftIdParam)
+          .order("position"),
+      ]);
+
+      if (draftRes.error || !draftRes.data) {
+        toast.error("Rascunho nao encontrado");
+        navigate(`/studies/${studyId}/quotation-drafts`);
+        setLoading(false);
+        return;
+      }
+
+      const draftData = draftRes.data as any;
+      const vendorsData = (vendorsRes.data as any[]) || [];
+      const selectedVendor = vendorsData.find((v: any) => v.id === draftData.vendor_id);
+
+      setRequestType(draftData.request_type === "manual" ? "manual" : "email");
+      setVendorId(draftData.vendor_id || "");
+      setVendorEmail(draftData.vendor_email || selectedVendor?.email || "");
+      setMessage(draftData.message || resolveDefaultMessage((profileRes.data as any)?.quotation_default_message));
+      setQuotationNumber(draftData.quotation_number || 1);
+
+      const draftItems: StageItem[] = ((draftItemsRes.data as any[]) || []).map((item: any) => {
+        const stage = stageById.get(item.stage_id);
+        return {
+          stage_id: item.stage_id,
+          code: stage?.code || "---",
+          name: stage?.name || "Etapa removida",
+          unit_abbr: stage?.unit_id ? unitMap[stage.unit_id] || "" : "",
+          quantity: stage?.quantity || 0,
+          observation: item.observation || "",
+        };
+      });
+
+      setItems(draftItems);
+      setLoading(false);
+      return;
+    }
 
     // Build items from URL params
+    setRequestType(initialRequestType);
+    setVendorId("");
+    setVendorEmail("");
     const stageIds = stageIdsParam.split(",").filter(Boolean);
     const selectedItems: StageItem[] = [];
     for (const sid of stageIds) {
@@ -170,7 +228,7 @@ export default function QuotationRequestPage() {
     setQuotationNumber(lastNum + 1);
 
     setLoading(false);
-  }, [studyId, user, stageIdsParam]);
+  }, [studyId, user, stageIdsParam, draftIdParam, initialRequestType, navigate]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -318,7 +376,7 @@ export default function QuotationRequestPage() {
       toast.error("Erro ao salvar itens da cotação");
     } else {
       toast.success(`Cotação ${String((req as any).quotation_number).padStart(3, "0")} salva como rascunho`);
-      navigate(`/studies/${studyId}/construction`);
+      navigate(`/studies/${studyId}/construction?view=budget`);
     }
     setSaving(false);
   };
@@ -386,7 +444,7 @@ export default function QuotationRequestPage() {
       } else {
         toast.success(`Cotação #${String((req as any).quotation_number).padStart(3, "0")} enviada por e-mail`);
       }
-      navigate(`/studies/${studyId}/construction`);
+      navigate(`/studies/${studyId}/construction?view=budget`);
     } else if (fnData?.error === "VENDOR_NO_EMAIL") {
       toast.error("Fornecedor sem e-mail cadastrado");
     } else if (fnData?.error === "RATE_LIMIT") {
@@ -453,7 +511,7 @@ export default function QuotationRequestPage() {
       <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(`/studies/${studyId}/construction`)}>
+          <Button variant="ghost" size="icon" onClick={() => navigate(`/studies/${studyId}/construction?view=budget`)}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-xl font-bold text-foreground">Nova Solicitação de Cotação</h1>
