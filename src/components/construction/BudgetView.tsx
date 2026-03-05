@@ -331,13 +331,34 @@ export default function BudgetView({ studyId }: Props) {
   };
 
   const handleApproveProposal = async (proposalId: string, qiId: string, stageId: string) => {
+    const stage = leafStages.find(s => s.id === stageId);
+    if (!stage) return;
+
+    const qiProposals = proposalsByQi[qiId] || [];
+    const proposal = qiProposals.find(p => p.id === proposalId);
+    if (!proposal) return;
+
+    // Validate: sum of already-approved quantities + this proposal's quantity must not exceed stage quantity
+    const approvedQty = qiProposals.filter(p => p.is_winner).reduce((sum, p) => sum + (p.quantity || 0), 0);
+    const proposalQty = proposal.quantity || 0;
+    if (approvedQty + proposalQty > stage.quantity) {
+      toast.error(`Quantidade excede o máximo da etapa. Aprovado: ${approvedQty}, esta cotação: ${proposalQty}, máximo: ${stage.quantity}`);
+      return;
+    }
+
     await supabase.from("budget_proposals" as any).update({ is_winner: true }).eq("id", proposalId);
-    await supabase.from("budget_quotation_items" as any)
-      .update({ status: "approved", approved_proposal_id: proposalId })
-      .eq("id", qiId);
-    await supabase.from("construction_stages" as any)
-      .update({ status: "orcamento" })
-      .eq("id", stageId);
+
+    // Check if total approved quantity now covers the full stage quantity
+    const newApprovedQty = approvedQty + proposalQty;
+    if (newApprovedQty >= stage.quantity) {
+      await supabase.from("budget_quotation_items" as any)
+        .update({ status: "approved", approved_proposal_id: proposalId })
+        .eq("id", qiId);
+      await supabase.from("construction_stages" as any)
+        .update({ status: "orcamento" })
+        .eq("id", stageId);
+    }
+
     toast.success("Cotação aprovada");
     fetchData();
   };
@@ -573,16 +594,22 @@ export default function BudgetView({ studyId }: Props) {
                               Aprovado
                             </Badge>
                           ) : (
-                            qi && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-6 text-[10px] px-2"
-                                onClick={() => handleApproveProposal(p.id, qi.id, stage.id)}
-                              >
-                                Aprovar
-                              </Button>
-                            )
+                            qi && (() => {
+                              const approvedQty = stageProposals.filter(sp => sp.is_winner).reduce((sum, sp) => sum + (sp.quantity || 0), 0);
+                              const wouldExceed = approvedQty + (p.quantity || 0) > stage.quantity;
+                              return (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 text-[10px] px-2"
+                                  onClick={(e) => { e.stopPropagation(); handleApproveProposal(p.id, qi.id, stage.id); }}
+                                  disabled={wouldExceed}
+                                  title={wouldExceed ? `Qtde excede o máximo (${stage.quantity})` : "Aprovar cotação"}
+                                >
+                                  Aprovar
+                                </Button>
+                              );
+                            })()
                           )}
                         </TableCell>
                       </TableRow>

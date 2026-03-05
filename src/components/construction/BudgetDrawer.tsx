@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Plus, CheckCircle2, XCircle, ShoppingCart } from "lucide-react";
+import { CalendarIcon, Plus, CheckCircle2, XCircle, ShoppingCart, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -109,6 +109,12 @@ export default function BudgetDrawer({
   const [newNotes, setNewNotes] = useState("");
   const [newDate, setNewDate] = useState<Date | undefined>(new Date());
 
+  // edit proposal
+  const [editingProposalId, setEditingProposalId] = useState<string | null>(null);
+  const [editUnitPrice, setEditUnitPrice] = useState("");
+  const [editQuantity, setEditQuantity] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+
   const fmt = (v: number) => formatBRNumber(v);
 
   const handleUnitPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -154,6 +160,11 @@ export default function BudgetDrawer({
 
   const currentStatus = quotationItem?.status || "pending";
 
+  // Central quantity logic — drives all enable/disable decisions
+  const approvedQty = proposals.filter(p => p.is_winner).reduce((sum, p) => sum + (p.quantity || 0), 0);
+  const remainingQty = stage.quantity - approvedQty;
+  const hasRemainingQty = remainingQty > 0;
+
   /* ─── ensure quotation item exists ─── */
   const ensureQI = async (): Promise<string | null> => {
     if (quotationItem) return quotationItem.id;
@@ -173,14 +184,12 @@ export default function BudgetDrawer({
       return;
     }
     const parsedQty = parseInt(newQuantity, 10);
-    const approvedQty = proposals.filter(p => p.is_winner).reduce((sum, p) => sum + (p.quantity || 0), 0);
-    const availableQty = stage.quantity - approvedQty;
     if (!parsedQty || parsedQty <= 0) {
       toast.error("Quantidade deve ser maior que zero");
       return;
     }
-    if (parsedQty > availableQty) {
-      toast.error(`Quantidade máxima disponível: ${availableQty}`);
+    if (parsedQty > remainingQty) {
+      toast.error(`Quantidade máxima disponível: ${remainingQty}`);
       return;
     }
     setSaving(true);
@@ -204,8 +213,8 @@ export default function BudgetDrawer({
     if (error) {
       toast.error("Erro ao salvar proposta");
     } else {
-      // update status to quoting if pending
-      if (currentStatus === "pending") {
+      // Always set to quoting when there's remaining qty (even if previously ordered/approved)
+      if (currentStatus !== "quoting") {
         await supabase.from("budget_quotation_items" as any)
           .update({ status: "quoting" })
           .eq("id", qiId);
@@ -216,7 +225,7 @@ export default function BudgetDrawer({
         quotation_item_id: qiId,
         study_id: studyId,
         action: "proposal_added",
-        details: `Proposta adicionada: ${vendorName?.nome_fantasia || vendorName?.razao_social || "—"} — R$ ${fmt(unitPrice)}/un`,
+        details: `Proposta adicionada: ${vendorName?.nome_fantasia || vendorName?.razao_social || "—"} — R$ ${fmt(unitPrice)}/un (restante: ${remainingQty - parsedQty}/${stage.quantity})`,
       });
 
       toast.success("Proposta adicionada");
@@ -229,6 +238,15 @@ export default function BudgetDrawer({
 
   /* ─── approve proposal ─── */
   const handleApprove = async (proposalId: string) => {
+    const proposal = proposals.find(p => p.id === proposalId);
+    if (!proposal) return;
+
+    const proposalQty = proposal.quantity || 0;
+    if (proposalQty > remainingQty) {
+      toast.error(`Quantidade excede o restante da etapa. Restante: ${remainingQty}, esta cotação: ${proposalQty}`);
+      return;
+    }
+
     setSaving(true);
     const qiId = quotationItem!.id;
 
@@ -236,20 +254,29 @@ export default function BudgetDrawer({
       .update({ is_winner: true })
       .eq("id", proposalId);
 
-    await supabase.from("budget_quotation_items" as any)
-      .update({ status: "approved", approved_proposal_id: proposalId })
-      .eq("id", qiId);
+    // Check if total approved quantity now covers the full stage quantity
+    const newRemainingQty = remainingQty - proposalQty;
+    if (newRemainingQty <= 0) {
+      // All quantity covered — mark as approved
+      await supabase.from("budget_quotation_items" as any)
+        .update({ status: "approved", approved_proposal_id: proposalId })
+        .eq("id", qiId);
+      await supabase.from("construction_stages" as any)
+        .update({ status: "orcamento" })
+        .eq("id", stage.id);
+    } else {
+      // Still missing quantity — keep as quoting
+      await supabase.from("budget_quotation_items" as any)
+        .update({ status: "quoting" })
+        .eq("id", qiId);
+    }
 
-    await supabase.from("construction_stages" as any)
-      .update({ status: "orcamento" })
-      .eq("id", stage.id);
-
-    const proposal = proposals.find(p => p.id === proposalId);
+    const newApprovedQty = approvedQty + proposalQty;
     await supabase.from("budget_history" as any).insert({
       quotation_item_id: qiId,
       study_id: studyId,
       action: "approved",
-      details: `Cotação aprovada: ${proposal?.vendor_name || "—"} — R$ ${fmt(proposal?.total_price || 0)}`,
+      details: `Cotação aprovada: ${proposal?.vendor_name || "—"} — R$ ${fmt(proposal?.total_price || 0)} (qtde: ${proposalQty}, total aprovado: ${newApprovedQty}/${stage.quantity})`,
     });
 
     toast.success("Cotação aprovada");
@@ -267,27 +294,128 @@ export default function BudgetDrawer({
       .update({ is_winner: false })
       .eq("id", proposalId);
 
+    const rejectedProposal = proposals.find(p => p.id === proposalId);
+    const rejectedQty = rejectedProposal?.quantity || 0;
     const remainingWinners = proposals.filter(p => p.id !== proposalId && p.is_winner);
+    const newApprovedQty = remainingWinners.reduce((sum, p) => sum + (p.quantity || 0), 0);
+
     if (remainingWinners.length === 0) {
+      // No winners left — revert to quoting/pending
       await supabase.from("budget_quotation_items" as any)
-        .update({ status: "quoting", approved_proposal_id: null })
+        .update({ status: proposals.length > 1 ? "quoting" : "pending", approved_proposal_id: null })
+        .eq("id", quotationItem.id);
+      await supabase.from("construction_stages" as any)
+        .update({ status: "pending" })
+        .eq("id", stage.id);
+    } else if (newApprovedQty < stage.quantity) {
+      // Quantity no longer fully covered — revert to quoting
+      await supabase.from("budget_quotation_items" as any)
+        .update({ status: "quoting" })
         .eq("id", quotationItem.id);
       await supabase.from("construction_stages" as any)
         .update({ status: "pending" })
         .eq("id", stage.id);
     }
 
-    const proposal = proposals.find(p => p.id === proposalId);
     await supabase.from("budget_history" as any).insert({
       quotation_item_id: quotationItem.id,
       study_id: studyId,
       action: "rejected",
-      details: `Cotação reprovada: ${proposal?.vendor_name || "—"}`,
+      details: `Cotação reprovada: ${rejectedProposal?.vendor_name || "—"} (qtde: ${rejectedQty}, restante aprovado: ${newApprovedQty}/${stage.quantity})`,
     });
 
     toast.success("Cotação reprovada");
     onDataChanged();
     fetchHistory();
+    setSaving(false);
+  };
+
+  /* ─── edit proposal ─── */
+  const startEdit = (p: Proposal) => {
+    setEditingProposalId(p.id);
+    setEditUnitPrice(p.unit_price.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    setEditQuantity(String(p.quantity || ""));
+    setEditNotes(p.notes || "");
+  };
+
+  const cancelEdit = () => {
+    setEditingProposalId(null);
+    setEditUnitPrice("");
+    setEditQuantity("");
+    setEditNotes("");
+  };
+
+  const handleEditUnitPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const digits = e.target.value.replace(/\D/g, "");
+    if (!digits) { setEditUnitPrice(""); return; }
+    const num = parseInt(digits, 10) / 100;
+    setEditUnitPrice(num.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  };
+
+  const handleSaveEdit = async (proposalId: string) => {
+    if (!editUnitPrice) { toast.error("Preencha o preço unitário"); return; }
+    const parsedQty = parseInt(editQuantity, 10);
+    if (!parsedQty || parsedQty <= 0) { toast.error("Quantidade deve ser maior que zero"); return; }
+
+    if (parsedQty > remainingQty) {
+      toast.error(`Quantidade máxima disponível: ${remainingQty}`);
+      return;
+    }
+
+    setSaving(true);
+    const unitPrice = parseCurrencyInput(editUnitPrice);
+    const totalPrice = unitPrice * parsedQty;
+
+    const { error } = await supabase.from("budget_proposals" as any)
+      .update({ unit_price: unitPrice, total_price: totalPrice, quantity: parsedQty, notes: editNotes || null })
+      .eq("id", proposalId);
+
+    if (error) {
+      toast.error("Erro ao atualizar cotação");
+    } else {
+      toast.success("Cotação atualizada");
+      cancelEdit();
+      onDataChanged();
+    }
+    setSaving(false);
+  };
+
+  /* ─── delete proposal ─── */
+  const handleDeleteProposal = async (proposalId: string) => {
+    setSaving(true);
+    const proposal = proposals.find(p => p.id === proposalId);
+
+    const { error } = await supabase.from("budget_proposals" as any)
+      .update({ is_deleted: true })
+      .eq("id", proposalId);
+
+    if (error) {
+      toast.error("Erro ao excluir cotação");
+    } else {
+      if (quotationItem) {
+        const remaining = proposals.filter(p => p.id !== proposalId && !p.is_winner);
+        const remainingWinners = proposals.filter(p => p.id !== proposalId && p.is_winner);
+        const allRemaining = proposals.filter(p => p.id !== proposalId);
+        if (allRemaining.length === 0) {
+          await supabase.from("budget_quotation_items" as any)
+            .update({ status: "pending", approved_proposal_id: null })
+            .eq("id", quotationItem.id);
+          await supabase.from("construction_stages" as any)
+            .update({ status: "pending" })
+            .eq("id", stage.id);
+        }
+
+        await supabase.from("budget_history" as any).insert({
+          quotation_item_id: quotationItem.id,
+          study_id: studyId,
+          action: "proposal_deleted",
+          details: `Cotação excluída: ${proposal?.vendor_name || "—"} — R$ ${fmt(proposal?.total_price || 0)}`,
+        });
+      }
+      toast.success("Cotação excluída");
+      onDataChanged();
+      fetchHistory();
+    }
     setSaving(false);
   };
 
@@ -419,67 +547,131 @@ export default function BudgetDrawer({
               <p className="text-sm text-muted-foreground text-center py-4">Nenhuma cotação registrada</p>
             )}
 
-            {proposals.map(p => (
-              <div
-                key={p.id}
-                className={cn(
-                  "rounded-lg border p-3 space-y-2",
-                  p.is_winner && "border-green-500 bg-green-50 dark:bg-green-900/10"
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{p.vendor_name || "—"}</span>
-                  {p.is_winner && (
-                    <Badge className="text-[10px] bg-green-600">
-                      Aprovado
-                    </Badge>
+            {proposals.map(p => {
+              const isEditing = editingProposalId === p.id;
+              // Can edit/delete: not a winner AND not fully used
+              const canEditDelete = !p.is_winner && currentStatus !== "used";
+
+              if (isEditing) {
+                return (
+                  <div key={p.id} className="rounded-lg border border-dashed border-primary p-3 space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase">Editar Cotação — {p.vendor_name || "—"}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs text-muted-foreground">Preço Unitário (R$)</label>
+                        <Input className="h-9 text-sm" placeholder="0,00" value={editUnitPrice} onChange={handleEditUnitPriceChange} inputMode="numeric" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Qtde (máx: {remainingQty})</label>
+                        <Input className="h-9 text-sm" type="number" min={1} placeholder="0" value={editQuantity} onChange={e => setEditQuantity(e.target.value)} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Observações</label>
+                      <Textarea className="text-sm min-h-[50px]" placeholder="Condições, observações..." value={editNotes} onChange={e => setEditNotes(e.target.value)} />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => handleSaveEdit(p.id)} disabled={saving} className="flex-1">Salvar</Button>
+                      <Button size="sm" variant="outline" onClick={cancelEdit} className="flex-1">Cancelar</Button>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={p.id}
+                  className={cn(
+                    "rounded-lg border p-3 space-y-2",
+                    p.is_winner && "border-green-500 bg-green-50 dark:bg-green-900/10"
                   )}
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground">Unit.</span>
-                    <p className="font-mono">R$ {fmt(p.unit_price)}</p>
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{p.vendor_name || "—"}</span>
+                    {p.is_winner && (
+                      <Badge className="text-[10px] bg-green-600">
+                        Aprovado
+                      </Badge>
+                    )}
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Total</span>
-                    <p className="font-mono font-medium">R$ {fmt(p.total_price)}</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Unit.</span>
+                      <p className="font-mono">R$ {fmt(p.unit_price)}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Total</span>
+                      <p className="font-mono font-medium">R$ {fmt(p.total_price)}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Qtde</span>
+                      <p>{p.quantity != null ? fmt(p.quantity) : "—"}</p>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Qtde</span>
-                    <p>{p.quantity != null ? fmt(p.quantity) : "—"}</p>
+                  {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{formatDateBR(p.proposal_date)}</span>
+                    <div className="flex items-center gap-1">
+                      {canEditDelete && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => startEdit(p)}
+                            disabled={saving}
+                            title="Editar cotação"
+                          >
+                            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => handleDeleteProposal(p.id)}
+                            disabled={saving}
+                            title="Excluir cotação"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        </>
+                      )}
+                      {p.is_winner ? (
+                        hasRemainingQty && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs text-destructive hover:text-destructive border-destructive/40"
+                            onClick={() => handleRejectProposal(p.id)}
+                            disabled={saving}
+                          >
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Reprovar
+                          </Button>
+                        )
+                      ) : (
+                        (() => {
+                          const wouldExceed = (p.quantity || 0) > remainingQty;
+                          return (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => handleApprove(p.id)}
+                              disabled={saving || wouldExceed}
+                              title={wouldExceed ? `Qtde excede o restante (${remainingQty})` : "Aprovar cotação"}
+                            >
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Aprovar
+                            </Button>
+                          );
+                        })()
+                      )}
+                    </div>
                   </div>
                 </div>
-                {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{formatDateBR(p.proposal_date)}</span>
-                  {currentStatus !== "ordered" && currentStatus !== "received" && (
-                    p.is_winner ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs text-destructive hover:text-destructive border-destructive/40"
-                        onClick={() => handleRejectProposal(p.id)}
-                        disabled={saving}
-                      >
-                        <XCircle className="h-3 w-3 mr-1" />
-                        Reprovar
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => handleApprove(p.id)}
-                        disabled={saving}
-                      >
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Aprovar
-                      </Button>
-                    )
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             {/* New Proposal Form */}
             {showNewProposal ? (
@@ -511,21 +703,12 @@ export default function BudgetDrawer({
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground">
-                      Qtde {(() => {
-                        const approvedQty = proposals.filter(p => p.is_winner).reduce((sum, p) => sum + (p.quantity || 0), 0);
-                        const availableQty = stage.quantity - approvedQty;
-                        return `(máx: ${availableQty})`;
-                      })()}
-                    </label>
+                    <label className="text-xs text-muted-foreground">Qtde (máx: {remainingQty})</label>
                     <Input
                       className="h-9 text-sm"
                       type="number"
                       min={1}
-                      max={(() => {
-                        const approvedQty = proposals.filter(p => p.is_winner).reduce((sum, p) => sum + (p.quantity || 0), 0);
-                        return stage.quantity - approvedQty;
-                      })()}
+                      max={remainingQty}
                       placeholder="0"
                       value={newQuantity}
                       onChange={e => setNewQuantity(e.target.value)}
@@ -577,15 +760,15 @@ export default function BudgetDrawer({
                 variant="outline"
                 size="sm"
                 className="w-full"
+                disabled={!hasRemainingQty}
+                title={!hasRemainingQty ? "Quantidade total da etapa já coberta pelas cotações aprovadas" : "Adicionar nova cotação"}
                 onClick={() => {
-                  const approvedQty = proposals.filter(p => p.is_winner).reduce((sum, p) => sum + (p.quantity || 0), 0);
-                  const availableQty = stage.quantity - approvedQty;
-                  setNewQuantity(String(availableQty > 0 ? availableQty : stage.quantity));
+                  setNewQuantity(String(remainingQty));
                   setShowNewProposal(true);
                 }}
               >
                 <Plus className="h-3.5 w-3.5 mr-1.5" />
-                + Nova Cotação
+                {!hasRemainingQty ? "Qtde total já aprovada" : `+ Nova Cotação (restam ${remainingQty})`}
               </Button>
             )}
           </TabsContent>
@@ -624,7 +807,7 @@ export default function BudgetDrawer({
 
         {/* Footer actions */}
         <SheetFooter className="mt-6 flex-row gap-2 sm:flex-row">
-          {currentStatus === "approved" && proposals.some(p => p.is_winner) && (
+          {!hasRemainingQty && proposals.some(p => p.is_winner) && currentStatus !== "ordered" && currentStatus !== "received" && currentStatus !== "used" && (
             <Button
               size="sm"
               onClick={handleGeneratePO}

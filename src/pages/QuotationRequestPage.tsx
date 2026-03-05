@@ -454,54 +454,103 @@ export default function QuotationRequestPage() {
     setSaving(false);
   };
 
-  /* ─── Send email (saves draft first, then invokes edge function) ─── */
+  /* ─── Send email (saves/updates draft first, then invokes edge function) ─── */
   const handleSendEmail = async () => {
     if (items.length === 0) { toast.error("Adicione pelo menos um item"); return; }
     if (requestType === "email" && !vendorEmail) { toast.error("E-mail do fornecedor é obrigatório"); return; }
     setSending(true);
 
-    // 1. Save draft first
-    const { data: req, error: reqErr } = await supabase
-      .from("quotation_requests" as any)
-      .insert({
-        study_id: studyId!,
-        vendor_id: vendorId || null,
-        vendor_email: vendorEmail || null,
-        request_type: requestType,
-        status: "draft",
-        message: message || null,
-      })
-      .select("id, quotation_number")
-      .single();
+    let requestId: string;
+    let requestNumber: number;
 
-    if (reqErr || !req) {
-      toast.error("Erro ao salvar cotação");
-      setSending(false);
-      return;
+    if (draftIdParam) {
+      // Update existing draft
+      const { error: updateErr } = await supabase
+        .from("quotation_requests" as any)
+        .update({
+          vendor_id: vendorId || null,
+          vendor_email: vendorEmail || null,
+          request_type: requestType,
+          message: message || null,
+        })
+        .eq("id", draftIdParam)
+        .eq("study_id", studyId!);
+
+      if (updateErr) {
+        toast.error("Erro ao salvar cotação");
+        setSending(false);
+        return;
+      }
+
+      // Replace items
+      await supabase
+        .from("quotation_request_items" as any)
+        .delete()
+        .eq("request_id", draftIdParam);
+
+      const { error: itemsErr } = await supabase
+        .from("quotation_request_items" as any)
+        .insert(items.map((item, idx) => ({
+          request_id: draftIdParam,
+          stage_id: item.stage_id,
+          observation: item.observation || null,
+          position: idx,
+          quantity: item.quantity,
+        })));
+
+      if (itemsErr) {
+        toast.error("Erro ao salvar itens da cotação");
+        setSending(false);
+        return;
+      }
+
+      requestId = draftIdParam;
+      requestNumber = quotationNumber;
+    } else {
+      // Create new draft
+      const { data: req, error: reqErr } = await supabase
+        .from("quotation_requests" as any)
+        .insert({
+          study_id: studyId!,
+          vendor_id: vendorId || null,
+          vendor_email: vendorEmail || null,
+          request_type: requestType,
+          status: "draft",
+          message: message || null,
+        })
+        .select("id, quotation_number")
+        .single();
+
+      if (reqErr || !req) {
+        toast.error("Erro ao salvar cotação");
+        setSending(false);
+        return;
+      }
+
+      const { error: itemsErr } = await supabase
+        .from("quotation_request_items" as any)
+        .insert(items.map((item, idx) => ({
+          request_id: (req as any).id,
+          stage_id: item.stage_id,
+          observation: item.observation || null,
+          position: idx,
+          quantity: item.quantity,
+        })));
+
+      if (itemsErr) {
+        toast.error("Erro ao salvar itens da cotação");
+        setSending(false);
+        return;
+      }
+
+      requestId = (req as any).id;
+      requestNumber = (req as any).quotation_number;
     }
 
-    const sendItems = items.map((item, idx) => ({
-      request_id: (req as any).id,
-      stage_id: item.stage_id,
-      observation: item.observation || null,
-      position: idx,
-      quantity: item.quantity,
-    }));
-
-    const { error: itemsErr2 } = await supabase
-      .from("quotation_request_items" as any)
-      .insert(sendItems);
-
-    if (itemsErr2) {
-      toast.error("Erro ao salvar itens da cotação");
-      setSending(false);
-      return;
-    }
-
-    // 2. Invoke edge function with minimal payload
+    // Invoke edge function
     const { data: fnData, error: fnError } = await supabase.functions.invoke(
       "send-quotation-email",
-      { body: { request_id: (req as any).id } }
+      { body: { request_id: requestId } }
     );
 
     setSending(false);
@@ -516,7 +565,7 @@ export default function QuotationRequestPage() {
       if (fnData.alreadySent) {
         toast.info("E-mail já foi enviado anteriormente");
       } else {
-        toast.success(`Cotação #${String((req as any).quotation_number).padStart(3, "0")} enviada por e-mail`);
+        toast.success(`Cotação #${String(requestNumber).padStart(3, "0")} enviada por e-mail`);
       }
       navigate(`/studies/${studyId}/construction?view=budget`);
     } else if (fnData?.error === "VENDOR_NO_EMAIL") {
