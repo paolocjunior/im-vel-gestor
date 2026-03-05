@@ -87,6 +87,7 @@ export default function QuotationRequestPage() {
   const [items, setItems] = useState<StageItem[]>([]);
   const [allStages, setAllStages] = useState<{ id: string; code: string; name: string; unit_id: string | null; quantity: number }[]>([]);
   const [units, setUnits] = useState<Record<string, string>>({});
+  const [approvedQtyByStage, setApprovedQtyByStage] = useState<Record<string, number>>({});
 
   const [vendorId, setVendorId] = useState("");
   const [vendorEmail, setVendorEmail] = useState("");
@@ -150,6 +151,32 @@ export default function QuotationRequestPage() {
       return !hasChildren && s.stage_type === "material";
     });
     setAllStages(materialStages);
+
+    // Load approved proposal quantities per stage
+    const stageIds = materialStages.map((s: any) => s.id);
+    if (stageIds.length > 0) {
+      const { data: qiData } = await supabase
+        .from("budget_quotation_items" as any)
+        .select("id, stage_id")
+        .eq("study_id", studyId)
+        .in("stage_id", stageIds);
+      if (qiData && (qiData as any[]).length > 0) {
+        const qiIds = (qiData as any[]).map((q: any) => q.id);
+        const { data: winnerData } = await supabase
+          .from("budget_proposals" as any)
+          .select("quotation_item_id, quantity")
+          .in("quotation_item_id", qiIds)
+          .eq("is_winner", true);
+        const qiToStage = Object.fromEntries((qiData as any[]).map((q: any) => [q.id, q.stage_id]));
+        const approvedMap: Record<string, number> = {};
+        for (const w of (winnerData as any[]) || []) {
+          const sid = qiToStage[w.quotation_item_id];
+          if (sid) approvedMap[sid] = (approvedMap[sid] || 0) + (w.quantity || 0);
+        }
+        setApprovedQtyByStage(approvedMap);
+      }
+    }
+
     const stageById = new Map(allStageRows.map((s: any) => [s.id, s]));
 
     if (draftIdParam) {
@@ -192,7 +219,7 @@ export default function QuotationRequestPage() {
           code: stage?.code || "---",
           name: stage?.name || "Etapa removida",
           unit_abbr: stage?.unit_id ? unitMap[stage.unit_id] || "" : "",
-          quantity: stage?.quantity || 0,
+          quantity: (item as any).quantity || stage?.quantity || 0,
           observation: item.observation || "",
         };
       });
@@ -206,9 +233,9 @@ export default function QuotationRequestPage() {
     setRequestType(initialRequestType);
     setVendorId("");
     setVendorEmail("");
-    const stageIds = stageIdsParam.split(",").filter(Boolean);
+    const selectedStageIds = stageIdsParam.split(",").filter(Boolean);
     const selectedItems: StageItem[] = [];
-    for (const sid of stageIds) {
+    for (const sid of selectedStageIds) {
       const stage = materialStages.find((s: any) => s.id === sid);
       if (stage) {
         selectedItems.push({
@@ -342,6 +369,51 @@ export default function QuotationRequestPage() {
     if (items.length === 0) { toast.error("Adicione pelo menos um item"); return; }
     setSaving(true);
 
+    // Atualiza rascunho existente
+    if (draftIdParam) {
+      const { error: updateErr } = await supabase
+        .from("quotation_requests" as any)
+        .update({
+          vendor_id: vendorId || null,
+          vendor_email: vendorEmail || null,
+          request_type: requestType,
+          message: message || null,
+        })
+        .eq("id", draftIdParam)
+        .eq("study_id", studyId!);
+
+      if (updateErr) {
+        toast.error("Erro ao salvar cotação");
+        setSaving(false);
+        return;
+      }
+
+      await supabase
+        .from("quotation_request_items" as any)
+        .delete()
+        .eq("request_id", draftIdParam);
+
+      const { error: itemsErr } = await supabase
+        .from("quotation_request_items" as any)
+        .insert(items.map((item, idx) => ({
+          request_id: draftIdParam,
+          stage_id: item.stage_id,
+          observation: item.observation || null,
+          position: idx,
+          quantity: item.quantity,
+        })));
+
+      if (itemsErr) {
+        toast.error("Erro ao salvar itens da cotação");
+      } else {
+        toast.success(`Rascunho ${String(quotationNumber).padStart(3, "0")} atualizado`);
+        navigate(`/studies/${studyId}/quotation-drafts`);
+      }
+      setSaving(false);
+      return;
+    }
+
+    // Cria novo rascunho
     const { data: req, error: reqErr } = await supabase
       .from("quotation_requests" as any)
       .insert({
@@ -366,6 +438,7 @@ export default function QuotationRequestPage() {
       stage_id: item.stage_id,
       observation: item.observation || null,
       position: idx,
+      quantity: item.quantity,
     }));
 
     const { error: itemsErr } = await supabase
@@ -412,6 +485,7 @@ export default function QuotationRequestPage() {
       stage_id: item.stage_id,
       observation: item.observation || null,
       position: idx,
+      quantity: item.quantity,
     }));
 
     const { error: itemsErr2 } = await supabase
@@ -511,10 +585,17 @@ export default function QuotationRequestPage() {
       <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(`/studies/${studyId}/construction?view=budget`)}>
-            <ArrowLeft className="h-5 w-5" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(draftIdParam ? `/studies/${studyId}/quotation-drafts` : `/studies/${studyId}/construction?view=budget`)}
+          >
+            <ArrowLeft className="h-4 w-4 mr-1.5" />
+            Voltar
           </Button>
-          <h1 className="text-xl font-bold text-foreground">Nova Solicitação de Cotação</h1>
+          <h1 className="text-xl font-bold text-foreground">
+            {draftIdParam ? "Editar Rascunho" : "Nova Solicitação de Cotação"}
+          </h1>
         </div>
 
         {/* Sub-header */}
@@ -631,7 +712,29 @@ export default function QuotationRequestPage() {
                     <TableCell className="text-xs font-mono">{item.code}</TableCell>
                     <TableCell className="text-xs">{item.name}</TableCell>
                     <TableCell className="text-xs text-center">{item.unit_abbr || "—"}</TableCell>
-                    <TableCell className="text-xs text-right font-mono">{item.quantity}</TableCell>
+                    <TableCell className="text-xs text-right">
+                      <Input
+                        className="h-7 text-xs w-20 text-right font-mono"
+                        type="number"
+                        min={1}
+                        max={(() => {
+                          const stage = allStages.find(s => s.id === item.stage_id);
+                          const approved = approvedQtyByStage[item.stage_id] || 0;
+                          return stage ? stage.quantity - approved : undefined;
+                        })()}
+                        value={item.quantity}
+                        onChange={e => {
+                          const val = parseInt(e.target.value, 10);
+                          const stage = allStages.find(s => s.id === item.stage_id);
+                          const approved = approvedQtyByStage[item.stage_id] || 0;
+                          const maxQty = stage ? stage.quantity - approved : Infinity;
+                          if (isNaN(val) || val <= 0 || val > maxQty) return;
+                          setItems(prev => prev.map(i =>
+                            i.stage_id === item.stage_id ? { ...i, quantity: val } : i
+                          ));
+                        }}
+                      />
+                    </TableCell>
                     <TableCell>
                       <Input
                         className="h-7 text-xs"

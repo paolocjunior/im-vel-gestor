@@ -54,7 +54,7 @@ interface Proposal {
   vendor_id: string;
   unit_price: number;
   total_price: number;
-  delivery_days: number | null;
+  quantity: number | null;
   proposal_date: string;
   is_winner: boolean;
   vendor_name?: string;
@@ -129,7 +129,7 @@ export default function BudgetView({ studyId }: Props) {
         .eq("is_deleted", false),
       supabase
         .from("budget_proposals" as any)
-        .select("id, quotation_item_id, vendor_id, unit_price, total_price, delivery_days, proposal_date, is_winner")
+        .select("id, quotation_item_id, vendor_id, unit_price, total_price, quantity, proposal_date, is_winner")
         .eq("study_id", studyId)
         .eq("is_deleted", false),
       supabase
@@ -330,6 +330,18 @@ export default function BudgetView({ studyId }: Props) {
     navigate(`/studies/${studyId}/quotation-request?type=${type}&stages=${stageIds}`);
   };
 
+  const handleApproveProposal = async (proposalId: string, qiId: string, stageId: string) => {
+    await supabase.from("budget_proposals" as any).update({ is_winner: true }).eq("id", proposalId);
+    await supabase.from("budget_quotation_items" as any)
+      .update({ status: "approved", approved_proposal_id: proposalId })
+      .eq("id", qiId);
+    await supabase.from("construction_stages" as any)
+      .update({ status: "orcamento" })
+      .eq("id", stageId);
+    toast.success("Cotação aprovada");
+    fetchData();
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -521,7 +533,7 @@ export default function BudgetView({ studyId }: Props) {
                         {best ? `R$ ${fmt(best.total_price)}` : "—"}
                       </TableCell>
                       <TableCell className="text-xs max-w-[120px] truncate">
-                        {best?.vendor_name || "—"}
+                        —
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge
@@ -539,10 +551,13 @@ export default function BudgetView({ studyId }: Props) {
                         <TableCell />
                         <TableCell />
                         <TableCell />
-                        <TableCell colSpan={2} className="text-xs text-muted-foreground pl-6">
+                        <TableCell className="text-xs text-muted-foreground pl-6">
                           ↳ {p.vendor_name}
                         </TableCell>
                         <TableCell />
+                        <TableCell className="text-xs text-right font-mono text-muted-foreground">
+                          {p.quantity != null ? fmt(p.quantity) : "—"}
+                        </TableCell>
                         <TableCell className="text-xs text-right font-mono text-muted-foreground">
                           R$ {fmt(p.unit_price)}
                         </TableCell>
@@ -551,14 +566,23 @@ export default function BudgetView({ studyId }: Props) {
                         <TableCell className="text-xs text-right font-mono text-muted-foreground">
                           R$ {fmt(p.total_price)}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {p.delivery_days ? `${p.delivery_days}d` : "—"}
-                        </TableCell>
+                        <TableCell />
                         <TableCell className="text-center">
-                          {p.is_winner && (
-                            <Badge variant="default" className="text-[10px] px-1.5 py-0.5">
-                              Vencedor
+                          {p.is_winner ? (
+                            <Badge variant="default" className="text-[10px] px-1.5 py-0.5 bg-green-600">
+                              Aprovado
                             </Badge>
+                          ) : (
+                            qi && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-[10px] px-2"
+                                onClick={() => handleApproveProposal(p.id, qi.id, stage.id)}
+                              >
+                                Aprovar
+                              </Button>
+                            )
                           )}
                         </TableCell>
                       </TableRow>

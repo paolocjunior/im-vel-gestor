@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Plus, CheckCircle2, XCircle, ShoppingCart, Trophy } from "lucide-react";
+import { CalendarIcon, Plus, CheckCircle2, XCircle, ShoppingCart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -46,7 +46,7 @@ interface Proposal {
   vendor_id: string;
   unit_price: number;
   total_price: number;
-  delivery_days: number | null;
+  quantity: number | null;
   proposal_date: string;
   is_winner: boolean;
   vendor_name?: string;
@@ -105,11 +105,21 @@ export default function BudgetDrawer({
   const [showNewProposal, setShowNewProposal] = useState(false);
   const [newVendorId, setNewVendorId] = useState("");
   const [newUnitPrice, setNewUnitPrice] = useState("");
-  const [newDeliveryDays, setNewDeliveryDays] = useState("");
+  const [newQuantity, setNewQuantity] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [newDate, setNewDate] = useState<Date | undefined>(new Date());
 
   const fmt = (v: number) => formatBRNumber(v);
+
+  const handleUnitPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const digits = e.target.value.replace(/\D/g, "");
+    if (!digits) { setNewUnitPrice(""); return; }
+    const num = parseInt(digits, 10) / 100;
+    setNewUnitPrice(num.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  };
+
+  const parseCurrencyInput = (value: string): number =>
+    parseFloat(value.replace(/\./g, "").replace(",", ".")) || 0;
 
   /* ─── fetch history + vendors ─── */
   const fetchHistory = useCallback(async () => {
@@ -162,12 +172,23 @@ export default function BudgetDrawer({
       toast.error("Preencha fornecedor e preço unitário");
       return;
     }
+    const parsedQty = parseInt(newQuantity, 10);
+    const approvedQty = proposals.filter(p => p.is_winner).reduce((sum, p) => sum + (p.quantity || 0), 0);
+    const availableQty = stage.quantity - approvedQty;
+    if (!parsedQty || parsedQty <= 0) {
+      toast.error("Quantidade deve ser maior que zero");
+      return;
+    }
+    if (parsedQty > availableQty) {
+      toast.error(`Quantidade máxima disponível: ${availableQty}`);
+      return;
+    }
     setSaving(true);
     const qiId = await ensureQI();
     if (!qiId) { setSaving(false); return; }
 
-    const unitPrice = parseFloat(newUnitPrice.replace(/\./g, "").replace(",", ".")) || 0;
-    const totalPrice = unitPrice * (stage.quantity || 1);
+    const unitPrice = parseCurrencyInput(newUnitPrice);
+    const totalPrice = unitPrice * parsedQty;
 
     const { error } = await supabase.from("budget_proposals" as any).insert({
       quotation_item_id: qiId,
@@ -175,7 +196,7 @@ export default function BudgetDrawer({
       vendor_id: newVendorId,
       unit_price: unitPrice,
       total_price: totalPrice,
-      delivery_days: newDeliveryDays ? parseInt(newDeliveryDays) : null,
+      quantity: parsedQty,
       notes: newNotes || null,
       proposal_date: newDate ? format(newDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"),
     });
@@ -211,25 +232,18 @@ export default function BudgetDrawer({
     setSaving(true);
     const qiId = quotationItem!.id;
 
-    // set all proposals as not winner, then set selected as winner
-    await supabase.from("budget_proposals" as any)
-      .update({ is_winner: false })
-      .eq("quotation_item_id", qiId);
     await supabase.from("budget_proposals" as any)
       .update({ is_winner: true })
       .eq("id", proposalId);
 
-    // update quotation item status
     await supabase.from("budget_quotation_items" as any)
       .update({ status: "approved", approved_proposal_id: proposalId })
       .eq("id", qiId);
 
-    // sync construction_stages.status
     await supabase.from("construction_stages" as any)
       .update({ status: "orcamento" })
       .eq("id", stage.id);
 
-    // log
     const proposal = proposals.find(p => p.id === proposalId);
     await supabase.from("budget_history" as any).insert({
       quotation_item_id: qiId,
@@ -244,32 +258,34 @@ export default function BudgetDrawer({
     setSaving(false);
   };
 
-  /* ─── reopen (reprovar) ─── */
-  const handleReject = async () => {
+  /* ─── reprovar proposta individual ─── */
+  const handleRejectProposal = async (proposalId: string) => {
     if (!quotationItem) return;
     setSaving(true);
 
     await supabase.from("budget_proposals" as any)
       .update({ is_winner: false })
-      .eq("quotation_item_id", quotationItem.id);
+      .eq("id", proposalId);
 
-    await supabase.from("budget_quotation_items" as any)
-      .update({ status: "quoting", approved_proposal_id: null })
-      .eq("id", quotationItem.id);
+    const remainingWinners = proposals.filter(p => p.id !== proposalId && p.is_winner);
+    if (remainingWinners.length === 0) {
+      await supabase.from("budget_quotation_items" as any)
+        .update({ status: "quoting", approved_proposal_id: null })
+        .eq("id", quotationItem.id);
+      await supabase.from("construction_stages" as any)
+        .update({ status: "pending" })
+        .eq("id", stage.id);
+    }
 
-    // sync construction_stages.status back to pending
-    await supabase.from("construction_stages" as any)
-      .update({ status: "pending" })
-      .eq("id", stage.id);
-
+    const proposal = proposals.find(p => p.id === proposalId);
     await supabase.from("budget_history" as any).insert({
       quotation_item_id: quotationItem.id,
       study_id: studyId,
       action: "rejected",
-      details: "Cotação reprovada / reaberta para novas propostas",
+      details: `Cotação reprovada: ${proposal?.vendor_name || "—"}`,
     });
 
-    toast.success("Cotação reaberta");
+    toast.success("Cotação reprovada");
     onDataChanged();
     fetchHistory();
     setSaving(false);
@@ -332,7 +348,7 @@ export default function BudgetDrawer({
     setShowNewProposal(false);
     setNewVendorId("");
     setNewUnitPrice("");
-    setNewDeliveryDays("");
+    setNewQuantity("");
     setNewNotes("");
     setNewDate(new Date());
   };
@@ -408,14 +424,14 @@ export default function BudgetDrawer({
                 key={p.id}
                 className={cn(
                   "rounded-lg border p-3 space-y-2",
-                  p.is_winner && "border-primary bg-primary/5"
+                  p.is_winner && "border-green-500 bg-green-50 dark:bg-green-900/10"
                 )}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">{p.vendor_name || "—"}</span>
                   {p.is_winner && (
-                    <Badge variant="default" className="text-[10px]">
-                      <Trophy className="h-3 w-3 mr-1" /> Vencedor
+                    <Badge className="text-[10px] bg-green-600">
+                      Aprovado
                     </Badge>
                   )}
                 </div>
@@ -429,24 +445,37 @@ export default function BudgetDrawer({
                     <p className="font-mono font-medium">R$ {fmt(p.total_price)}</p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Prazo</span>
-                    <p>{p.delivery_days ? `${p.delivery_days} dias` : "—"}</p>
+                    <span className="text-muted-foreground">Qtde</span>
+                    <p>{p.quantity != null ? fmt(p.quantity) : "—"}</p>
                   </div>
                 </div>
                 {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>{formatDateBR(p.proposal_date)}</span>
-                  {!p.is_winner && currentStatus !== "ordered" && currentStatus !== "received" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => handleApprove(p.id)}
-                      disabled={saving}
-                    >
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Aprovar
-                    </Button>
+                  {currentStatus !== "ordered" && currentStatus !== "received" && (
+                    p.is_winner ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs text-destructive hover:text-destructive border-destructive/40"
+                        onClick={() => handleRejectProposal(p.id)}
+                        disabled={saving}
+                      >
+                        <XCircle className="h-3 w-3 mr-1" />
+                        Reprovar
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => handleApprove(p.id)}
+                        disabled={saving}
+                      >
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Aprovar
+                      </Button>
+                    )
                   )}
                 </div>
               </div>
@@ -477,17 +506,29 @@ export default function BudgetDrawer({
                       className="h-9 text-sm"
                       placeholder="0,00"
                       value={newUnitPrice}
-                      onChange={e => setNewUnitPrice(e.target.value)}
+                      onChange={handleUnitPriceChange}
+                      inputMode="numeric"
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground">Prazo (dias)</label>
+                    <label className="text-xs text-muted-foreground">
+                      Qtde {(() => {
+                        const approvedQty = proposals.filter(p => p.is_winner).reduce((sum, p) => sum + (p.quantity || 0), 0);
+                        const availableQty = stage.quantity - approvedQty;
+                        return `(máx: ${availableQty})`;
+                      })()}
+                    </label>
                     <Input
                       className="h-9 text-sm"
                       type="number"
-                      placeholder="30"
-                      value={newDeliveryDays}
-                      onChange={e => setNewDeliveryDays(e.target.value)}
+                      min={1}
+                      max={(() => {
+                        const approvedQty = proposals.filter(p => p.is_winner).reduce((sum, p) => sum + (p.quantity || 0), 0);
+                        return stage.quantity - approvedQty;
+                      })()}
+                      placeholder="0"
+                      value={newQuantity}
+                      onChange={e => setNewQuantity(e.target.value)}
                     />
                   </div>
                 </div>
@@ -536,10 +577,15 @@ export default function BudgetDrawer({
                 variant="outline"
                 size="sm"
                 className="w-full"
-                onClick={() => setShowNewProposal(true)}
+                onClick={() => {
+                  const approvedQty = proposals.filter(p => p.is_winner).reduce((sum, p) => sum + (p.quantity || 0), 0);
+                  const availableQty = stage.quantity - approvedQty;
+                  setNewQuantity(String(availableQty > 0 ? availableQty : stage.quantity));
+                  setShowNewProposal(true);
+                }}
               >
                 <Plus className="h-3.5 w-3.5 mr-1.5" />
-                Nova Cotação
+                + Nova Cotação
               </Button>
             )}
           </TabsContent>
@@ -578,31 +624,16 @@ export default function BudgetDrawer({
 
         {/* Footer actions */}
         <SheetFooter className="mt-6 flex-row gap-2 sm:flex-row">
-          {currentStatus === "approved" && (
-            <>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleReject}
-                disabled={saving}
-                className="flex-1"
-              >
-                <XCircle className="h-3.5 w-3.5 mr-1.5" />
-                Reprovar
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleGeneratePO}
-                disabled={saving}
-                className="flex-1"
-              >
-                <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
-                Gerar Pedido
-              </Button>
-            </>
-          )}
-          {(currentStatus === "quoting" || currentStatus === "pending") && proposals.length > 0 && (
-            <p className="text-xs text-muted-foreground">Selecione uma proposta na aba Cotações para aprovar</p>
+          {currentStatus === "approved" && proposals.some(p => p.is_winner) && (
+            <Button
+              size="sm"
+              onClick={handleGeneratePO}
+              disabled={saving}
+              className="flex-1"
+            >
+              <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
+              Gerar Pedido
+            </Button>
           )}
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             Fechar
