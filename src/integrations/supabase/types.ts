@@ -227,6 +227,7 @@ export type Database = {
           is_winner: boolean
           notes: string | null
           proposal_date: string
+          quantity: number | null
           quotation_item_id: string
           study_id: string
           total_price: number
@@ -242,6 +243,7 @@ export type Database = {
           is_winner?: boolean
           notes?: string | null
           proposal_date?: string
+          quantity?: number | null
           quotation_item_id: string
           study_id: string
           total_price?: number
@@ -257,6 +259,7 @@ export type Database = {
           is_winner?: boolean
           notes?: string | null
           proposal_date?: string
+          quantity?: number | null
           quotation_item_id?: string
           study_id?: string
           total_price?: number
@@ -1000,6 +1003,7 @@ export type Database = {
           id: string
           observation: string | null
           position: number
+          quantity: number | null
           request_id: string
           stage_id: string
           total_price: number | null
@@ -1011,6 +1015,7 @@ export type Database = {
           id?: string
           observation?: string | null
           position?: number
+          quantity?: number | null
           request_id: string
           stage_id: string
           total_price?: number | null
@@ -1022,6 +1027,7 @@ export type Database = {
           id?: string
           observation?: string | null
           position?: number
+          quantity?: number | null
           request_id?: string
           stage_id?: string
           total_price?: number | null
